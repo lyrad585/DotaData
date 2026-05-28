@@ -3,6 +3,7 @@ import sys
 import logging
 import requests
 import mssql_python
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -261,6 +262,79 @@ def get_unsynced_match_ids(conn, limit=20):
     finally:
         cursor.close()
 
+def sync_opendota_deep_match_details(match_id, conn):
+    """
+    Fetches comprehensive match telemetry from the correct OpenDota API path
+    and updates both Match_Details and Match_Player_Performances within a single try block.
+    """
+    # FIXED: Verified exact functional endpoint path
+    api_url = f"https://api.opendota.com/api/matches/{match_id}"
+    logging.info(f"Extracting granular deep data metrics block from OpenDota for Match ID: {match_id}")
+    
+    cursor = conn.cursor()
+    try:
+        # Step 1: Hit the network API endpoint
+        response = requests.get(api_url, timeout=15)
+        response.raise_for_status()
+        m = response.json()
+
+        # Step 2: Ingest Match Header Summary Metrics (OpenDota.Match_Details)
+        header_sql = """
+        MERGE OpenDota.Match_Details AS target
+        USING (SELECT ? AS match_id) AS source ON target.match_id = source.match_id
+        WHEN MATCHED THEN
+            UPDATE SET barracks_status_dire = ?, barracks_status_radiant = ?, cluster = ?, dire_score = ?, duration = ?, engine = ?, first_blood_time = ?, game_mode = ?, human_players = ?, match_seq_num = ?, radiant_score = ?, radiant_win = ?, skill = ?, start_time = ?, tower_status_dire = ?, tower_status_radiant = ?, version = ?, patch = ?, region = ?, last_updated_at = GETDATE()
+        WHEN NOT MATCHED THEN
+            INSERT (match_id, barracks_status_dire, barracks_status_radiant, cluster, dire_score, duration, engine, first_blood_time, game_mode, human_players, match_seq_num, radiant_score, radiant_win, skill, start_time, tower_status_dire, tower_status_radiant, version, patch, region)
+            VALUES (source.match_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        h_params = (
+            m.get('barracks_status_dire'), m.get('barracks_status_radiant'), m.get('cluster'), 
+            m.get('dire_score'), m.get('duration'), m.get('engine'), m.get('first_blood_time'), 
+            m.get('game_mode'), m.get('human_players'), m.get('match_seq_num'), m.get('radiant_score'), 
+            1 if m.get('radiant_win') else 0, m.get('skill'), m.get('start_time'), m.get('tower_status_dire'), 
+            m.get('tower_status_radiant'), m.get('version'), m.get('patch'), m.get('region')
+        )
+        cursor.execute(header_sql, (int(match_id),) + h_params + h_params)
+
+        # Step 3: Ingest All 10 Participants Metrics (OpenDota.Match_Player_Performances)
+        player_sql = """
+        MERGE OpenDota.Match_Player_Performances AS target
+        USING (SELECT ? AS match_id, ? AS player_slot) AS source ON target.match_id = source.match_id AND target.player_slot = source.player_slot
+        WHEN MATCHED THEN
+            UPDATE SET account_id = ?, kills = ?, deaths = ?, assists = ?, gold = ?, gold_per_min = ?, gold_spent = ?, net_worth = ?, total_gold = ?, xp_per_min = ?, total_xp = ?, level = ?, hero_id = ?, hero_variant = ?, hero_damage = ?, hero_healing = ?, tower_damage = ?, last_hits = ?, denies = ?, kda = ?, teamfight_participation = ?, stuns = ?, win = ?, lose = ?, last_updated_at = GETDATE()
+        WHEN NOT MATCHED THEN
+            INSERT (match_id, player_slot, account_id, kills, deaths, assists, gold, gold_per_min, gold_spent, net_worth, total_gold, xp_per_min, total_xp, level, hero_id, hero_variant, hero_damage, hero_healing, tower_damage, last_hits, denies, kda, teamfight_participation, stuns, win, lose)
+            VALUES (source.match_id, source.player_slot, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        
+        for p in m.get('players', []):
+            slot = p.get('player_slot')
+            if slot is None: 
+                continue
+                
+            p_params = (
+                p.get('account_id'), p.get('kills'), p.get('deaths'), p.get('assists'), 
+                p.get('gold'), p.get('gold_per_min'), p.get('gold_spent'), p.get('net_worth'), 
+                p.get('total_gold'), p.get('xp_per_min'), p.get('total_xp'), p.get('level'), 
+                p.get('hero_id'), p.get('hero_variant'), p.get('hero_damage'), p.get('hero_healing'), 
+                p.get('tower_damage'), p.get('last_hits'), p.get('denies'), p.get('kda'), 
+                p.get('teamfight_participation'), p.get('stuns'), 
+                1 if p.get('win') == 1 else 0, 1 if p.get('lose') == 1 else 0
+            )
+            cursor.execute(player_sql, (int(match_id), int(slot)) + p_params + p_params)
+
+        conn.commit()
+        logging.info(f"Successfully finalized deep database entries for Match ID {match_id}.")
+        return True
+
+    except Exception as e:
+        logging.error(f"Pipeline error loading deep metrics for match {match_id}: {e}")
+        conn.rollback()
+        return False
+    finally:
+        cursor.close()
+
 # 5. This is how the connection and cursor are physically created in your main execution loop:
 def main():
     if not ACCOUNT_IDS:
@@ -285,14 +359,18 @@ def main():
                 sync_opendota_player_matches(player_id, conn)
         
         # PHASE 2: Automatically discover missing matches from the combined pool
-        # Capped at 20 to protect your execution from API rate limits
         unsynced_matches = get_unsynced_match_ids(conn, limit=20)
         
-        # PHASE 3: This is where we will loop through those specific missing IDs
+        # PHASE 3: Deep crawl match detail data layers
         if unsynced_matches:
-            for match_id in unsynced_matches:
-                # sync_opendota_deep_match_details(match_id, conn)
-                pass
+            logging.info(f"Discovered {len(unsynced_matches)} missing match profiles. Starting crawlers.")
+            for match_row in unsynced_matches:
+                # Extract integer match_id safely from the row item query result
+                match_id = match_row
+                sync_opendota_deep_match_details(match_id, conn)
+                time.sleep(1.1)  # Space calls out to stay well clear of standard public api tier blocking rules
+        else:
+            logging.info("OpenDota details tables are completely synchronized.")
                 
     except Exception as e:
         logging.critical(f"Master pipeline control routine collapsed: {e}")
