@@ -230,6 +230,37 @@ def sync_opendota_player_matches(player_id, conn):
     finally:
         cursor.close()
 
+def get_unsynced_match_ids(conn, limit=20):
+    """
+    Queries the database to find distinct match_ids that exist in the Player_Matches 
+    table but have not yet been processed into the deep Match_Details table.
+    """
+    logging.info("Querying OpenDota database schemas for un-synced deep match targets...")
+    
+    cursor = conn.cursor()
+    try:
+        # Optimized lookup using a LEFT JOIN to find missing records
+        query = """
+            SELECT DISTINCT TOP (?) pm.match_id
+            FROM OpenDota.Player_Matches pm
+            LEFT JOIN OpenDota.Match_Details md ON pm.match_id = md.match_id
+            WHERE md.match_id IS NULL
+            ORDER BY pm.match_id DESC;
+        """
+        
+        cursor.execute(query, (limit,))
+        # Flatten the row tuples into a clean, list array of raw match IDs
+        match_ids = [row[0] for row in cursor.fetchall()]
+        
+        logging.info(f"Discovery complete. Identified {len(match_ids)} un-synced matches ready for deep crawl.")
+        return match_ids
+
+    except Exception as e:
+        logging.error(f"Failed to identify and queue un-synced match items: {e}")
+        return []
+    finally:
+        cursor.close()
+
 # 5. This is how the connection and cursor are physically created in your main execution loop:
 def main():
     if not ACCOUNT_IDS:
@@ -245,12 +276,23 @@ def main():
         # Open the connection using mssql_python
         conn = mssql_python.connect(CONN_STR)
         
+        # PHASE 1: Collect profiles, aliases, and historical stubs across all players
         for player_id in account_list:
             profile_success = sync_opendota_player_profile(player_id, conn)
             
             if profile_success:
                 sync_opendota_player_aliases(player_id, conn)
                 sync_opendota_player_matches(player_id, conn)
+        
+        # PHASE 2: Automatically discover missing matches from the combined pool
+        # Capped at 20 to protect your execution from API rate limits
+        unsynced_matches = get_unsynced_match_ids(conn, limit=20)
+        
+        # PHASE 3: This is where we will loop through those specific missing IDs
+        if unsynced_matches:
+            for match_id in unsynced_matches:
+                # sync_opendota_deep_match_details(match_id, conn)
+                pass
                 
     except Exception as e:
         logging.critical(f"Master pipeline control routine collapsed: {e}")
