@@ -1,0 +1,512 @@
+2026-05-27 19:31:07,347 [INFO] Opening connection to SQL Server.
+2026-05-27 19:31:07,369 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 19:31:07,828 [INFO] Response: 200 - OK
+2026-05-27 19:31:07,835 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 19:31:08,300 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 19:31:08,301 [ERROR] GraphQL Query: 
+            query(GetPlayerMatchIds) {
+                player(steamAccountId: $steamId) {
+                    matches(request: { skip: $skip, take: $take }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 19:31:08,305 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 19:31:08,305 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 19:31:08,306 [INFO] Pipeline closed safely.
+2026-05-27 19:35:03,190 [INFO] Opening connection to SQL Server.
+2026-05-27 19:35:03,211 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 19:35:03,598 [INFO] Response: 200 - OK
+2026-05-27 19:35:03,600 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 19:35:04,141 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 19:35:04,142 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: $steamId) {
+                    matches(request: { skip: $skip, take: $take }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 19:35:04,142 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 19:35:04,142 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 19:35:04,143 [INFO] Pipeline closed safely.
+2026-05-27 19:42:12,424 [INFO] Opening connection to SQL Server.
+2026-05-27 19:42:12,443 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 19:42:12,848 [INFO] Response: 200 - OK
+2026-05-27 19:42:12,850 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 19:42:13,446 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 19:42:13,446 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds($steamId: Long!, $skip: Int!, $take: Int!) {
+                player(steamAccountId: $steamId) {
+                    matches(request: { skip: $skip, take: $take }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 19:42:13,446 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 19:42:13,446 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 19:42:13,447 [INFO] Pipeline closed safely.
+2026-05-27 19:44:11,678 [INFO] Opening connection to SQL Server.
+2026-05-27 19:44:11,696 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 19:44:12,053 [INFO] Response: 200 - OK
+2026-05-27 19:44:12,055 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 19:44:12,440 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 19:44:12,440 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: $steamId) {
+                    matches(request: { skip: $skip, take: $take }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 19:44:12,440 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 19:44:12,440 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 19:44:12,441 [INFO] Pipeline closed safely.
+2026-05-27 19:44:57,669 [INFO] Opening connection to SQL Server.
+2026-05-27 19:44:57,688 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 19:44:58,089 [INFO] Response: 200 - OK
+2026-05-27 19:44:58,096 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 19:44:58,502 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 19:44:58,502 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: $steamId) {
+                    matches(request: { skip: $skip, take: $take }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamAccountId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 19:44:58,503 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 19:44:58,503 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 19:44:58,504 [INFO] Pipeline closed safely.
+2026-05-27 19:52:26,453 [INFO] Opening connection to SQL Server.
+2026-05-27 19:52:26,473 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 19:52:26,888 [INFO] Response: 200 - OK
+2026-05-27 19:52:26,890 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 19:52:27,347 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 19:52:27,347 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: $steamId) {
+                    matches(request: { skip: $skip, take: $take }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamAccountId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 19:52:27,347 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 19:52:27,348 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 19:52:27,348 [INFO] Pipeline closed safely.
+2026-05-27 19:53:07,318 [INFO] Opening connection to SQL Server.
+2026-05-27 19:53:07,337 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 19:53:07,706 [INFO] Response: 200 - OK
+2026-05-27 19:53:07,708 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 19:53:07,709 [CRITICAL] Pipeline crashed: %d format: a real number is required, not str
+2026-05-27 19:53:07,709 [INFO] Pipeline closed safely.
+2026-05-27 19:56:54,309 [INFO] Opening connection to SQL Server.
+2026-05-27 19:56:54,328 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 19:56:54,680 [INFO] Response: 200 - OK
+2026-05-27 19:56:54,687 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 19:56:55,083 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 19:56:55,083 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: 144548731) {
+                    matches(request: { skip: 0, take: 100 }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamAccountId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 19:56:55,083 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 19:56:55,084 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 19:56:55,084 [INFO] Pipeline closed safely.
+2026-05-27 19:57:38,713 [INFO] Opening connection to SQL Server.
+2026-05-27 19:57:38,732 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 19:57:39,134 [INFO] Response: 200 - OK
+2026-05-27 19:57:39,141 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 19:57:39,759 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 19:57:39,759 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: 144548731) {
+                    matches(request: { skip: 0, take: 100 }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamAccountId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 19:57:39,759 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 19:57:39,759 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 19:57:39,760 [INFO] Pipeline closed safely.
+2026-05-27 19:59:20,760 [INFO] Opening connection to SQL Server.
+2026-05-27 19:59:20,779 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 19:59:21,118 [INFO] Response: 200 - OK
+2026-05-27 19:59:21,125 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 19:59:21,503 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 19:59:21,504 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: $steamId) {
+                    matches(request: { skip: $skip, take: $take }) {
+                        id
+                    }
+                }
+            }
+        
+2026-05-27 19:59:21,504 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 19:59:21,504 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 19:59:21,505 [INFO] Pipeline closed safely.
+2026-05-27 20:00:33,096 [INFO] Opening connection to SQL Server.
+2026-05-27 20:00:33,116 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 20:00:33,459 [INFO] Response: 200 - OK
+2026-05-27 20:00:33,467 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 20:00:33,855 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 503 Server Error: Service Unavailable for url: https://api.stratz.com/graphql
+2026-05-27 20:00:33,855 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: $steamId) {
+                    matches(request: { skip: $skip, take: $take }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamAccountId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 20:00:33,855 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 20:00:33,855 [ERROR] Traceback details:
+Traceback (most recent call last):
+  File "F:\Documents\Daryl\SQL\Dota\DotaData\Py\Dota2\sync_player_pipeline.py", line 270, in sync_player_matches_from_stratz
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\lyrad\AppData\Roaming\Python\Python314\site-packages\requests\models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 503 Server Error: Service Unavailable for url: https://api.stratz.com/graphql
+2026-05-27 20:00:33,857 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 20:00:33,858 [INFO] Pipeline closed safely.
+2026-05-27 20:05:34,728 [INFO] Opening connection to SQL Server.
+2026-05-27 20:05:34,748 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 20:05:35,144 [INFO] Response: 200 - OK
+2026-05-27 20:05:35,151 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 20:05:35,598 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 20:05:35,598 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: $steamId) {
+                    matches(request: { skip: $skip, take: $take }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamAccountId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 20:05:35,598 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 20:05:35,598 [ERROR] Traceback details:
+Traceback (most recent call last):
+  File "F:\Documents\Daryl\SQL\Dota\DotaData\Py\Dota2\sync_player_pipeline.py", line 270, in sync_player_matches_from_stratz
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\lyrad\AppData\Roaming\Python\Python314\site-packages\requests\models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 20:05:35,600 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 20:05:35,601 [INFO] Pipeline closed safely.
+2026-05-27 20:07:34,667 [INFO] Opening connection to SQL Server.
+2026-05-27 20:07:34,687 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 20:07:35,041 [INFO] Response: 200 - OK
+2026-05-27 20:07:35,048 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 20:07:35,049 [CRITICAL] Pipeline crashed: %d format: a real number is required, not str
+2026-05-27 20:07:35,049 [INFO] Pipeline closed safely.
+2026-05-27 20:08:03,258 [INFO] Opening connection to SQL Server.
+2026-05-27 20:08:03,276 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 20:08:03,638 [INFO] Response: 200 - OK
+2026-05-27 20:08:03,644 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 20:08:04,302 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 20:08:04,302 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: 144548731) {
+                    matches(request: { skip: 0, take: 100 }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamAccountId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 20:08:04,302 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 20:08:04,302 [ERROR] Traceback details:
+Traceback (most recent call last):
+  File "F:\Documents\Daryl\SQL\Dota\DotaData\Py\Dota2\sync_player_pipeline.py", line 271, in sync_player_matches_from_stratz
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\lyrad\AppData\Roaming\Python\Python314\site-packages\requests\models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 20:08:04,304 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 20:08:04,304 [INFO] Pipeline closed safely.
+2026-05-27 20:10:46,465 [INFO] Opening connection to SQL Server.
+2026-05-27 20:10:46,484 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 20:10:46,883 [INFO] Response: 200 - OK
+2026-05-27 20:10:46,886 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 20:10:46,886 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: %d format: a real number is required, not str
+2026-05-27 20:10:46,886 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: 144548731) {
+                    matches(request: { skip: 0, take: 100 }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamAccountId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 20:10:46,886 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 20:10:46,887 [ERROR] Traceback details:
+Traceback (most recent call last):
+  File "F:\Documents\Daryl\SQL\Dota\DotaData\Py\Dota2\sync_player_pipeline.py", line 240, in sync_player_matches_from_stratz
+    query = """
+            ~~~
+    ...<6 lines>...
+        }
+        ~
+    """ % (
+    ~~~~^~~
+        account_id,
+        ~~~~~~~~~~~
+        skip,
+        ~~~~~
+    )
+    ~
+TypeError: %d format: a real number is required, not str
+2026-05-27 20:10:46,887 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 20:10:46,888 [INFO] Pipeline closed safely.
+2026-05-27 20:12:27,897 [INFO] Opening connection to SQL Server.
+2026-05-27 20:12:27,915 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 20:12:28,260 [INFO] Response: 200 - OK
+2026-05-27 20:12:28,267 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 20:12:28,743 [INFO] API Response Status: 200
+2026-05-27 20:12:28,744 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:12:29,244 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 20:12:29,244 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: 144548731) {
+                    matches(request: { skip: 0, take: 100 }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamAccountId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 20:12:29,244 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 20:12:29,245 [ERROR] Traceback details:
+Traceback (most recent call last):
+  File "F:\Documents\Daryl\SQL\Dota\DotaData\Py\Dota2\sync_player_pipeline.py", line 271, in sync_player_matches_from_stratz
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\lyrad\AppData\Roaming\Python\Python314\site-packages\requests\models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 20:12:29,246 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 20:12:29,247 [INFO] Pipeline closed safely.
+2026-05-27 20:17:24,174 [INFO] Opening connection to SQL Server.
+2026-05-27 20:17:24,194 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 20:17:24,617 [INFO] Response: 200 - OK
+2026-05-27 20:17:24,624 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 20:17:25,132 [ERROR] STRATZ match sync loop encountered a critical error for player 144548731: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 20:17:25,132 [ERROR] GraphQL Query: 
+            query GetPlayerMatchIds {
+                player(steamAccountId: 144548731) {
+                    matches(request: { skip: 0, take: 100 }) {
+                        id
+                        startDateTime
+                        durationSeconds
+                        gameMode
+                        players(steamAccountId: $steamId) {
+                            playerSlot
+                            isRadiant
+                            isVictory
+                            heroId
+                        }
+                    }
+                }
+            }
+        
+2026-05-27 20:17:25,132 [ERROR] Variables: {'steamId': 144548731, 'skip': 0, 'take': 100}
+2026-05-27 20:17:25,132 [ERROR] Traceback details:
+Traceback (most recent call last):
+  File "F:\Documents\Daryl\SQL\Dota\DotaData\Py\Dota2\sync_player_pipeline.py", line 263, in sync_player_matches_from_stratz
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\lyrad\AppData\Roaming\Python\Python314\site-packages\requests\models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 400 Client Error: Bad Request for url: https://api.stratz.com/graphql
+2026-05-27 20:17:25,133 [INFO] STRATZ match extraction completed. Processed 0 records for account 144548731.
+2026-05-27 20:17:25,134 [INFO] Pipeline closed safely.
+2026-05-27 20:17:50,075 [INFO] Opening connection to SQL Server.
+2026-05-27 20:17:50,095 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 20:17:50,449 [INFO] Response: 200 - OK
+2026-05-27 20:17:50,454 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 20:17:51,039 [INFO] API Response Status: 200
+2026-05-27 20:17:51,039 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:51,039 [INFO] Retrieved 100 matches from STRATZ (Offset: 0). Processing database write...
+2026-05-27 20:17:51,563 [INFO] API Response Status: 200
+2026-05-27 20:17:51,563 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:51,563 [INFO] Retrieved 100 matches from STRATZ (Offset: 100). Processing database write...
+2026-05-27 20:17:51,962 [INFO] API Response Status: 200
+2026-05-27 20:17:51,962 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:51,962 [INFO] Retrieved 100 matches from STRATZ (Offset: 200). Processing database write...
+2026-05-27 20:17:52,358 [INFO] API Response Status: 200
+2026-05-27 20:17:52,359 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:52,359 [INFO] Retrieved 100 matches from STRATZ (Offset: 300). Processing database write...
+2026-05-27 20:17:52,776 [INFO] API Response Status: 200
+2026-05-27 20:17:52,776 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:52,776 [INFO] Retrieved 100 matches from STRATZ (Offset: 400). Processing database write...
+2026-05-27 20:17:53,167 [INFO] API Response Status: 200
+2026-05-27 20:17:53,167 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:53,167 [INFO] Retrieved 100 matches from STRATZ (Offset: 500). Processing database write...
+2026-05-27 20:17:53,569 [INFO] API Response Status: 200
+2026-05-27 20:17:53,569 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:53,569 [INFO] Retrieved 100 matches from STRATZ (Offset: 600). Processing database write...
+2026-05-27 20:17:53,969 [INFO] API Response Status: 200
+2026-05-27 20:17:53,969 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:53,969 [INFO] Retrieved 100 matches from STRATZ (Offset: 700). Processing database write...
+2026-05-27 20:17:54,369 [INFO] API Response Status: 200
+2026-05-27 20:17:54,369 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:54,369 [INFO] Retrieved 100 matches from STRATZ (Offset: 800). Processing database write...
+2026-05-27 20:17:54,782 [INFO] API Response Status: 200
+2026-05-27 20:17:54,782 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:54,783 [INFO] Retrieved 100 matches from STRATZ (Offset: 900). Processing database write...
+2026-05-27 20:17:55,200 [INFO] API Response Status: 200
+2026-05-27 20:17:55,200 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:17:55,200 [INFO] Retrieved 100 matches from STRATZ (Offset: 1000). Processing database write...
+2026-05-27 20:20:04,487 [INFO] Opening connection to SQL Server.
+2026-05-27 20:20:04,506 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 20:20:04,879 [INFO] Response: 200 - OK
+2026-05-27 20:20:04,882 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 20:20:05,508 [INFO] API Response Status: 200
+2026-05-27 20:20:05,509 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:20:05,509 [INFO] Retrieved 100 matches from STRATZ (Offset: 0). Processing database write...
+2026-05-27 20:20:07,179 [INFO] API Response Status: 200
+2026-05-27 20:20:07,179 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:20:07,179 [INFO] Retrieved 100 matches from STRATZ (Offset: 100). Processing database write...
+2026-05-27 20:20:08,692 [INFO] API Response Status: 200
+2026-05-27 20:20:08,692 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:20:08,693 [INFO] Retrieved 100 matches from STRATZ (Offset: 200). Processing database write...
+2026-05-27 20:20:10,219 [INFO] API Response Status: 200
+2026-05-27 20:20:10,219 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:20:10,219 [INFO] Retrieved 100 matches from STRATZ (Offset: 300). Processing database write...
+2026-05-27 20:21:55,099 [INFO] Opening connection to SQL Server.
+2026-05-27 20:21:55,117 [INFO] Extracting profile for Player ID 144548731 using https://api.opendota.com/api/players/144548731
+2026-05-27 20:21:55,472 [INFO] Response: 200 - OK
+2026-05-27 20:21:55,479 [INFO] Initiating full STRATZ match history extraction for player: 144548731
+2026-05-27 20:22:04,412 [INFO] API Response Status: 200
+2026-05-27 20:22:04,412 [INFO] Total matches fetched from STRATZ: 100
+2026-05-27 20:22:04,412 [INFO] Retrieved 100 matches from STRATZ (Offset: 0). Processing database write...

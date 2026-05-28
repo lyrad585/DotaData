@@ -116,7 +116,6 @@ def sync_opendota_player_aliases(player_id, conn):
     Fetches profile telemetry data from OpenDota, extracts the historical aliases list,
     and populates OpenDota.Player_Aliases using a single, unified try block.
     """
-    # FIXED LOGIC: Strict adherence to your verified URL string
     api_url = f"https://api.opendota.com/api/players/{player_id}"
     logging.info(f"Extracting historical aliases from OpenDota for ID: {player_id}")
     
@@ -133,20 +132,24 @@ def sync_opendota_player_aliases(player_id, conn):
             logging.warning(f"No valid account_id found for alias tracking on player {player_id}. Skipping.")
             return False
 
-        aliases_list = profile.get('aliases', [])
+        # FIX 1: Extract aliases from root 'data', not nested 'profile'
+        aliases_list = data.get('aliases', [])
 
         delete_sql = "DELETE FROM OpenDota.Player_Aliases WHERE account_id = ?;"
         cursor.execute(delete_sql, (int(account_id),))
 
         if aliases_list:
             insert_sql = """
-                INSERT INTO OpenDota.Player_Aliases (account_id, alias_name)
-                VALUES (?, ?);
+                INSERT INTO OpenDota.Player_Aliases (account_id, alias_name, name_since
+                VALUES (?, ?, ?);
             """
-            for alias in aliases_list:
-                if alias:
-                    cursor.execute(insert_sql, (int(account_id), str(alias)))
-                    
+            for alias_obj in aliases_list:
+                # FIX 2: Safely extract the structural string name from the object dictionary mapping
+                alias_name = alias_obj.get('personaname')
+                name_since = alias_obj.get('name_since')
+                if alias_name:
+                    cursor.execute(insert_sql, (int(account_id), str(alias_name), name_since))
+
         conn.commit()
         logging.info(f"Successfully synchronized {len(aliases_list)} aliases for account {account_id} into OpenDota.Player_Aliases.")
         return True
