@@ -335,6 +335,116 @@ def sync_opendota_deep_match_details(match_id, conn):
     finally:
         cursor.close()
 
+def sync_stratz_player_profile(account_id, conn):
+    """
+    Queries the STRATZ GraphQL API to extract player metadata metrics
+    and updates both Stratz.Players and Stratz.Player_Aliases within a single try block.
+    """
+    stratz_token = os.getenv("STRATZ_TOKEN")
+    if not stratz_token:
+        logging.warning("STRATZ_TOKEN missing from environment configurations. Skipping STRATZ sync.")
+        return False
+
+    # FIXED: Verified exact functional endpoint path
+    api_url = "https://api.stratz.com/graphql"
+    headers = {
+        "Authorization": f"Bearer {stratz_token}",
+        "Content-Type": "application/json"
+    }
+
+    # Format the input account_id directly into the string query body
+    graphql_query = """
+    query GetPlayerProfile {
+      player(steamAccountId: %d) {
+        matchCount
+        winCount
+        imp
+        firstMatchDate
+        lastMatchDate
+        lastMatchRegionId
+        behaviorScore
+        isFollowed
+        names {
+          name
+          lastSeenDateTime
+        }
+      }
+    }
+    """ % int(account_id)
+
+    logging.info(f"Extracting STRATZ player profile analytics for ID: {account_id}")
+
+    cursor = conn.cursor()
+    try:
+        # Step 1: Execute the network POST query request to STRATZ
+        response = requests.post(api_url, json={"query": graphql_query}, headers=headers, timeout=15)
+        response.raise_for_status()
+        res_data = response.json()
+
+        if "errors" in res_data:
+            logging.error(f"STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
+            return False
+
+        player_data = res_data.get("data", {}).get("player")
+        if not player_data:
+            logging.warning(f"No player database metrics profile returned from STRATZ for ID: {account_id}")
+            return False
+
+        # Step 2: Execute Upsert (MERGE) for Stratz.Players
+        player_merge_sql = """
+        MERGE Stratz.Players AS target
+        USING (SELECT ? AS steam_account_id) AS source
+        ON (target.steam_account_id = source.steam_account_id)
+        WHEN MATCHED THEN
+            UPDATE SET 
+                match_count = ?, win_count = ?, imp = ?, first_match_date = ?, 
+                last_match_date = ?, last_match_region_id = ?, behavior_score = ?, 
+                is_followed = ?, last_updated_at = GETDATE()
+        WHEN NOT MATCHED THEN
+            INSERT (steam_account_id, match_count, win_count, imp, first_match_date, 
+                    last_match_date, last_match_region_id, behavior_score, is_followed)
+            VALUES (source.steam_account_id, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        
+        is_followed_bit = 1 if player_data.get("isFollowed") else 0
+        core_params = (
+            player_data.get("matchCount"),
+            player_data.get("winCount"),
+            player_data.get("imp"),
+            player_data.get("firstMatchDate"),
+            player_data.get("lastMatchDate"),
+            player_data.get("lastMatchRegionId"),
+            player_data.get("behaviorScore"),
+            is_followed_bit
+        )
+        
+        cursor.execute(player_merge_sql, (int(account_id),) + core_params + core_params)
+
+        # Step 3: Clear and Sync child rows for Stratz.Player_Aliases
+        cursor.execute("DELETE FROM Stratz.Player_Aliases WHERE steam_account_id = ?;", (int(account_id),))
+        
+        names_list = player_data.get("names", [])
+        if names_list:
+            insert_alias_sql = """
+                INSERT INTO Stratz.Player_Aliases (steam_account_id, alias_name, last_seen_date_time)
+                VALUES (?, ?, ?);
+            """
+            for n in names_list:
+                alias_name = n.get("name")
+                if alias_name:
+                    cursor.execute(insert_alias_sql, (int(account_id), str(alias_name), n.get("lastSeenDateTime")))
+
+        conn.commit()
+        logging.info(f"Successfully processed profile records for player {account_id} into Stratz.Players and Stratz.Player_Aliases.")
+        return True
+
+    except Exception as e:
+        logging.error(f"Pipeline processing failed for STRATZ player profile components {account_id}: {e}")
+        conn.rollback()
+        return False
+    finally:
+        cursor.close()
+
 # 5. This is how the connection and cursor are physically created in your main execution loop:
 def main():
     if not ACCOUNT_IDS:
@@ -354,9 +464,16 @@ def main():
         for player_id in account_list:
             profile_success = sync_opendota_player_profile(player_id, conn)
             
+        # PHASE 1: Collect profile layers and match stub entries
+        for player_id in account_list:
+            profile_success = sync_opendota_player_profile(player_id, conn)
+            
             if profile_success:
                 sync_opendota_player_aliases(player_id, conn)
                 sync_opendota_player_matches(player_id, conn)
+                
+                # Layer on STRATZ profile metadata tracking sandboxes
+                sync_stratz_player_profile(player_id, conn)
         
         # PHASE 2: Automatically discover missing matches from the combined pool
         unsynced_matches = get_unsynced_match_ids(conn, limit=20)
