@@ -31,8 +31,10 @@ CREATE TABLE OpenDota.Player_Aliases (
     alias_id INT IDENTITY(1,1) CONSTRAINT PK_OpenDota_Player_Aliases PRIMARY KEY,
     account_id BIGINT,
     alias_name NVARCHAR(255) NOT NULL,
+    name_since DATETIME,
     CONSTRAINT FK_OpenDota_Player_Aliases_Players FOREIGN KEY (account_id) 
-        REFERENCES OpenDota.Players(account_id)
+        REFERENCES OpenDota.Players(account_id),
+    CONSTRAINT UQ_OpenDota_Player_Aliases UNIQUE (alias_name, name_since)
 );
 
 -- 3. Composite History Matches Table

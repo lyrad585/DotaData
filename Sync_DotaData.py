@@ -140,7 +140,7 @@ def sync_opendota_player_aliases(player_id, conn):
 
         if aliases_list:
             insert_sql = """
-                INSERT INTO OpenDota.Player_Aliases (account_id, alias_name, name_since
+                INSERT INTO OpenDota.Player_Aliases (account_id, alias_name, name_since)
                 VALUES (?, ?, ?);
             """
             for alias_obj in aliases_list:
@@ -614,6 +614,7 @@ def main():
                 
                 # Layer on STRATZ profile metadata tracking sandboxes
                 sync_stratz_player_profile(player_id, conn)
+                sync_stratz_match_details(player_id, conn)
         
         # PHASE 2: Automatically discover missing matches from the combined pool
         unsynced_matches = get_unsynced_match_ids(conn, limit=20)
