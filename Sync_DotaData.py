@@ -603,8 +603,10 @@ def sync_stratz_match_details(account_id, conn):
 
     except Exception as e:
         logging.error(f"Pipeline transaction failed processing STRATZ match data for {account_id}: {e}")
-        logging.error(f"Query: {player_sql}")
-        logging.error(f"Parameters: {p_params}")
+        logging.error(f"Match Details Query: {header_sql}") if header_sql else None
+        logging.error(f"Match Details Parameters: {h_params}") if h_params else None
+        logging.error(f"Match Player Performance Query: {player_sql}") if player_sql else None
+        logging.error(f"Match Player Performance Parameters: {p_params}") if p_params else None
 #       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
         return False

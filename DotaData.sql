@@ -165,9 +165,9 @@ CREATE TABLE Stratz.Match_Details (
     barracks_status_dire INT NULL,
     cluster_id INT NULL,
     first_blood_time INT NULL,
-    lobby_type INT NULL,
+    lobby_type NVARCHAR(25) NULL,
     num_human_players INT NULL,
-    game_mode INT NULL,
+    game_mode NVARCHAR(25) NULL,
     is_stats BIT NULL,
     tournament_id INT NULL,
     tournament_round INT NULL,
@@ -179,11 +179,11 @@ CREATE TABLE Stratz.Match_Details (
     sequence_num BIGINT NULL,
     player_rank INT NULL,
     bracket INT NULL,
-    analysis_outcome INT NULL,
+    analysis_outcome NVARCHAR(25) NULL,
     predicted_outcome_weight INT NULL,
-    bottom_lane_outcome INT NULL,
-    mid_lane_outcome INT NULL,
-    top_lane_outcome INT NULL,
+    bottom_lane_outcome NVARCHAR(25) NULL,
+    mid_lane_outcome NVARCHAR(25) NULL,
+    top_lane_outcome NVARCHAR(25) NULL,
     last_updated_at DATETIME CONSTRAINT DF_Stratz_Match_Details_last_updated DEFAULT GETDATE()
 );
 
