@@ -244,7 +244,7 @@ def sync_opendota_player_matches(player_id, conn):
     finally:
         cursor.close()
 
-def get_unsynced_match_ids(conn, limit=20):
+def get_unsynced_match_ids(conn, limit=5):
     """
     Queries the database to find distinct match_ids that exist in the Player_Matches 
     table but have not yet been processed into the deep Match_Details table.
@@ -645,7 +645,7 @@ def main():
                 sync_stratz_match_details(player_id, conn)
         
         # PHASE 2: Automatically discover missing matches from the combined pool
-        unsynced_matches = get_unsynced_match_ids(conn, limit=20)
+        unsynced_matches = get_unsynced_match_ids(conn, limit=5)
         
         # PHASE 3: Deep crawl match detail data layers
         if unsynced_matches:
