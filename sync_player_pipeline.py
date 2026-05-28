@@ -176,7 +176,7 @@ def sync_player_profile(account_id, conn):
 def sync_player_matches_from_stratz(account_id, conn):
     """
     Queries STRATZ GraphQL API to pull ALL match stubs for an account_id,
-    paginating 100 matches at a time and merging them into OpenDota_Player_Matches.
+    paginating 100 matches at a time and merging them into dbo.OpenDota_Player_Matches.
     """
     stratz_token = os.getenv("STRATZ_TOKEN")
     if not stratz_token:
@@ -191,7 +191,7 @@ def sync_player_matches_from_stratz(account_id, conn):
     
     cursor = conn.cursor()
     match_merge_sql = """
-        MERGE OpenDota_Player_Matches AS target
+        MERGE dbo.OpenDota_Player_Matches AS target
         USING (SELECT ? AS match_id, ? AS account_id) AS source
         ON (target.match_id = source.match_id AND target.account_id = source.account_id)
         WHEN MATCHED THEN
