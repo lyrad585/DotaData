@@ -44,41 +44,31 @@ from datetime import datetime
 def sync_opendota_player_profile(player_id, conn):
     """
     Fetches a single player profile from the correct OpenDota API path
-    and upserts the data into OpenDota.Players.
+    and upserts the data into OpenDota.Players using a single try block.
     """
-    # CORRECT ENDPOINT: Verified functional route
+    # FIXED LOGIC: Strict adherence to your verified URL string
     api_url = f"https://api.opendota.com/api/players/{player_id}"
     logging.info(f"Extracting OpenDota player profile layer for ID: {player_id}")
     
+    cursor = conn.cursor()
     try:
         response = requests.get(api_url, timeout=10)
         response.raise_for_status()
         data = response.json()
-    except Exception as e:
-        logging.error(f"Failed to fetch profile for Player {player_id} via OpenDota API: {e}")
-        return False
 
-    # Isolate profile tracking keys safely
-    profile = data.get('profile', {}) or {}
-    account_id = profile.get('account_id')
-    
-    if not account_id:
-        logging.warning(f"No account_id detected in the profile payload for player {player_id}. Skipping.")
-        return False
+        profile = data.get('profile', {}) or {}
+        account_id = profile.get('account_id')
+        
+        if not account_id:
+            logging.warning(f"No account_id detected in the profile payload for player {player_id}. Skipping.")
+            return False
 
-    # Parse timestamps into native datetime objects for SQL Server
-    last_log_raw = profile.get('last_login')
-    last_login = None
-    if last_log_raw:
-        try:
+        last_log_raw = profile.get('last_login')
+        last_login = None
+        if last_log_raw:
             clean_ts = last_log_raw.replace('T', ' ').replace('Z', '')
             last_login = datetime.strptime(clean_ts, '%Y-%m-%d %H:%M:%S.%f')
-        except Exception:
-            last_login = None
 
-    cursor = conn.cursor()
-    try:
-        # Targets the explicit OpenDota.Players schema path
         player_merge_sql = """
         MERGE OpenDota.Players AS target
         USING (SELECT ? AS account_id) AS source
@@ -99,24 +89,12 @@ def sync_opendota_player_profile(player_id, conn):
         """
         
         params = (
-            int(account_id),
-            data.get('tracked_until'),
-            data.get('solo_competitive_rank'),
-            data.get('competitive_rank'),
-            data.get('rank_tier'),
-            data.get('leaderboard_rank'),
-            profile.get('personaname'),
-            profile.get('name'),
-            1 if profile.get('plus') else 0,
-            profile.get('cheese'),
-            profile.get('steamid'),
-            profile.get('avatar'),
-            profile.get('avatarmedium'),
-            profile.get('avatarfull'),
-            profile.get('profileurl'),
-            last_login,
-            profile.get('loccountrycode'),
-            1 if profile.get('is_contributor') else 0,
+            int(account_id), data.get('tracked_until'), data.get('solo_competitive_rank'),
+            data.get('competitive_rank'), data.get('rank_tier'), data.get('leaderboard_rank'),
+            profile.get('personaname'), profile.get('name'), 1 if profile.get('plus') else 0,
+            profile.get('cheese'), profile.get('steamid'), profile.get('avatar'),
+            profile.get('avatarmedium'), profile.get('avatarfull'), profile.get('profileurl'),
+            last_login, profile.get('loccountrycode'), 1 if profile.get('is_contributor') else 0,
             1 if profile.get('is_subscriber') else 0
         )
         
@@ -126,7 +104,7 @@ def sync_opendota_player_profile(player_id, conn):
         return True
 
     except Exception as e:
-        logging.error(f"Database transaction failed for player row entry {account_id}: {e}")
+        logging.error(f"Pipeline processing failed for player profile {player_id}: {e}")
         conn.rollback()
         return False
     finally:
@@ -134,44 +112,38 @@ def sync_opendota_player_profile(player_id, conn):
 
 def sync_opendota_player_aliases(player_id, conn):
     """
-    Fetches a player's profile data from OpenDota, extracts their historic
-    aliases list, and syncs them into the OpenDota.Player_Aliases table.
+    Fetches profile telemetry data from OpenDota, extracts the historical aliases list,
+    and populates OpenDota.Player_Aliases using a single, unified try block.
     """
-    api_url = f"https://opendota.com{player_id}"
-    logging.info(f"Extracting historic aliases from OpenDota for ID: {player_id}")
+    # FIXED LOGIC: Strict adherence to your verified URL string
+    api_url = f"https://api.opendota.com/api/players/{player_id}"
+    logging.info(f"Extracting historical aliases from OpenDota for ID: {player_id}")
     
+    cursor = conn.cursor()
     try:
         response = requests.get(api_url, timeout=10)
         response.raise_for_status()
         data = response.json()
-    except Exception as e:
-        logging.error(f"Failed to fetch aliases for Player {player_id}: {e}")
-        return False
 
-    profile = data.get('profile', {}) or {}
-    account_id = profile.get('account_id')
-    
-    if not account_id:
-        logging.warning(f"No valid account_id found for alias tracking on player {player_id}. Skipping.")
-        return False
+        profile = data.get('profile', {}) or {}
+        account_id = profile.get('account_id')
+        
+        if not account_id:
+            logging.warning(f"No valid account_id found for alias tracking on player {player_id}. Skipping.")
+            return False
 
-    # Extract the nested raw aliases array list
-    aliases_list = profile.get('aliases', [])
+        aliases_list = profile.get('aliases', [])
 
-    cursor = conn.cursor()
-    try:
-        # Step A: Delete historic entries to maintain clean row continuity
         delete_sql = "DELETE FROM OpenDota.Player_Aliases WHERE account_id = ?;"
         cursor.execute(delete_sql, (int(account_id),))
 
-        # Step B: Insert array entries if any are present
         if aliases_list:
             insert_sql = """
                 INSERT INTO OpenDota.Player_Aliases (account_id, alias_name)
                 VALUES (?, ?);
             """
             for alias in aliases_list:
-                if alias:  # Protect against blank records or empty elements
+                if alias:
                     cursor.execute(insert_sql, (int(account_id), str(alias)))
                     
         conn.commit()
@@ -179,7 +151,7 @@ def sync_opendota_player_aliases(player_id, conn):
         return True
 
     except Exception as e:
-        logging.error(f"Database transaction failed during alias write sequence for account {account_id}: {e}")
+        logging.error(f"Pipeline processing failed for player aliases {player_id}: {e}")
         conn.rollback()
         return False
     finally:
@@ -201,10 +173,10 @@ def main():
         conn = mssql_python.connect(CONN_STR)
         
         for player_id in account_list:
-            # Sync parent metadata row first to maintain foreign key constraint rules
+            # Sync parent metadata profile row first to protect foreign key mapping bounds
             profile_success = sync_opendota_player_profile(player_id, conn)
             
-            # Sync child historical names only if the parent constraint is satisfied
+            # Sync child historical names only if the profile row was written successfully
             if profile_success:
                 sync_opendota_player_aliases(player_id, conn)
                 
