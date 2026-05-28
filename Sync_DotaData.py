@@ -132,6 +132,59 @@ def sync_opendota_player_profile(player_id, conn):
     finally:
         cursor.close()
 
+def sync_opendota_player_aliases(player_id, conn):
+    """
+    Fetches a player's profile data from OpenDota, extracts their historic
+    aliases list, and syncs them into the OpenDota.Player_Aliases table.
+    """
+    api_url = f"https://opendota.com{player_id}"
+    logging.info(f"Extracting historic aliases from OpenDota for ID: {player_id}")
+    
+    try:
+        response = requests.get(api_url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        logging.error(f"Failed to fetch aliases for Player {player_id}: {e}")
+        return False
+
+    profile = data.get('profile', {}) or {}
+    account_id = profile.get('account_id')
+    
+    if not account_id:
+        logging.warning(f"No valid account_id found for alias tracking on player {player_id}. Skipping.")
+        return False
+
+    # Extract the nested raw aliases array list
+    aliases_list = profile.get('aliases', [])
+
+    cursor = conn.cursor()
+    try:
+        # Step A: Delete historic entries to maintain clean row continuity
+        delete_sql = "DELETE FROM OpenDota.Player_Aliases WHERE account_id = ?;"
+        cursor.execute(delete_sql, (int(account_id),))
+
+        # Step B: Insert array entries if any are present
+        if aliases_list:
+            insert_sql = """
+                INSERT INTO OpenDota.Player_Aliases (account_id, alias_name)
+                VALUES (?, ?);
+            """
+            for alias in aliases_list:
+                if alias:  # Protect against blank records or empty elements
+                    cursor.execute(insert_sql, (int(account_id), str(alias)))
+                    
+        conn.commit()
+        logging.info(f"Successfully synchronized {len(aliases_list)} aliases for account {account_id} into OpenDota.Player_Aliases.")
+        return True
+
+    except Exception as e:
+        logging.error(f"Database transaction failed during alias write sequence for account {account_id}: {e}")
+        conn.rollback()
+        return False
+    finally:
+        cursor.close()
+
 # 5. This is how the connection and cursor are physically created in your main execution loop:
 def main():
     if not ACCOUNT_IDS:
@@ -148,9 +201,13 @@ def main():
         conn = mssql_python.connect(CONN_STR)
         
         for player_id in account_list:
-            # We pass the open 'conn' object straight into your function
-            sync_opendota_player_profile(player_id, conn)
+            # Sync parent metadata row first to maintain foreign key constraint rules
+            profile_success = sync_opendota_player_profile(player_id, conn)
             
+            # Sync child historical names only if the parent constraint is satisfied
+            if profile_success:
+                sync_opendota_player_aliases(player_id, conn)
+                
     except Exception as e:
         logging.critical(f"Master pipeline control routine collapsed: {e}")
     finally:
