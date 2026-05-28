@@ -105,7 +105,10 @@ def sync_opendota_player_profile(player_id, conn):
         return True
 
     except Exception as e:
-        logging.error(f"Pipeline processing failed for player profile {player_id}: {e}")
+        logging.error(f"Pipeline processing failed with OpenDota for player profile {player_id}: {e}")
+        logging.error(f"Query: {player_merge_sql}")
+        logging.error(f"Parameters: {params}")
+#       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
         return False
     finally:
@@ -155,7 +158,10 @@ def sync_opendota_player_aliases(player_id, conn):
         return True
 
     except Exception as e:
-        logging.error(f"Pipeline processing failed for player aliases {player_id}: {e}")
+        logging.error(f"Pipeline processing failed with OpenDota for player aliases {player_id}: {e}")
+        logging.error(f"Query: {insert_sql}")
+        logging.error(f"Values: {int(account_id)}, str{alias_name}, {name_since}")
+#       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
         return False
     finally:
@@ -228,7 +234,11 @@ def sync_opendota_player_matches(player_id, conn):
         return True
 
     except Exception as e:
-        logging.error(f"Pipeline processing failed for player match history stubs {player_id}: {e}")
+        logging.error(f"Pipeline processing failed with OpenDota for player match history stubs {player_id}: {e}")
+        logging.error(f"Query: {match_merge_sql}")
+        logging.error(f"Match ID: {int(match_id)}")
+        logging.error(f"Core Parameters: {core_params}")
+#       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
         return False
     finally:
@@ -261,6 +271,9 @@ def get_unsynced_match_ids(conn, limit=20):
 
     except Exception as e:
         logging.error(f"Failed to identify and queue un-synced match items: {e}")
+        logging.error(f"Query: {query}")
+        logging.error(f"Limit: {limit}")
+#       logging.error("Traceback details:", exc_info=True)
         return []
     finally:
         cursor.close()
@@ -328,11 +341,14 @@ def sync_opendota_deep_match_details(match_id, conn):
             cursor.execute(player_sql, (int(match_id), int(slot)) + p_params + p_params)
 
         conn.commit()
-        logging.info(f"Successfully finalized deep database entries for Match ID {match_id}.")
+        logging.info(f"Successfully finalized deep database entries from OpenDota for Match ID {match_id}.")
         return True
 
     except Exception as e:
-        logging.error(f"Pipeline error loading deep metrics for match {match_id}: {e}")
+        logging.error(f"Pipeline error loading deep metrics from OpenDota for match {match_id}: {e}")
+        logging.error(f"Query: {player_sql}")
+        logging.error(f"Parameters: {p_params}")
+#       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
         return False
     finally:
@@ -384,6 +400,8 @@ def sync_stratz_player_profile(account_id, conn):
 
         if "errors" in res_data:
             logging.error(f"STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
+            logging.error(f"Query: {graphql_query}")
+#           logging.error("Traceback details:", exc_info=True)
             return False
 
         player_data = res_data.get("data", {}).get("player")
@@ -439,6 +457,9 @@ def sync_stratz_player_profile(account_id, conn):
 
     except Exception as e:
         logging.error(f"Pipeline processing failed for STRATZ player profile components {account_id}: {e}")
+        logging.error(f"Query: {insert_alias_sql}")
+        logging.error(f"Values: {int(account_id)}, str{alias_name}, {n.get('lastSeenDateTime')}")
+#       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
         return False
     finally:
@@ -494,6 +515,8 @@ def sync_stratz_match_details(account_id, conn):
 
         if "errors" in res_data:
             logging.error(f"STRATZ API error on deep match sync for account {account_id}: {res_data['errors']}")
+            logging.error(f"Query: {graphql_query}")
+#           logging.error("Traceback details:", exc_info=True)
             return False
 
         match_list = res_data.get("data", {}).get("player", {}).get("matches", []) or []
@@ -580,6 +603,9 @@ def sync_stratz_match_details(account_id, conn):
 
     except Exception as e:
         logging.error(f"Pipeline transaction failed processing STRATZ match data for {account_id}: {e}")
+        logging.error(f"Query: {player_sql}")
+        logging.error(f"Parameters: {p_params}")
+#       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
         return False
     finally:
