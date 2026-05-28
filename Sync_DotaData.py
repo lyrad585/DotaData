@@ -157,6 +157,79 @@ def sync_opendota_player_aliases(player_id, conn):
     finally:
         cursor.close()
 
+def sync_opendota_player_matches(player_id, conn):
+    """
+    Fetches historical match list stubs from the correct OpenDota API path
+    and upserts the data into OpenDota.Player_Matches using a single try block.
+    """
+    # VERIFIED CORRECT URL: Strictly using the /api/players/ route
+    api_url = f"https://api.opendota.com/api/players/{player_id}/matches"
+    logging.info(f"Extracting historic match overview stubs from OpenDota for ID: {player_id}")
+    
+    cursor = conn.cursor()
+    try:
+        # Step 1: Hit the network API endpoint
+        response = requests.get(api_url, timeout=15)
+        response.raise_for_status()
+        matches = response.json()
+
+        # Step 2: Execute Database Upsert (MERGE) Transaction Loop
+        match_merge_sql = """
+        MERGE OpenDota.Player_Matches AS target
+        USING (SELECT ? AS match_id, ? AS account_id) AS source
+        ON (target.match_id = source.match_id AND target.account_id = source.account_id)
+        WHEN MATCHED THEN
+            UPDATE SET 
+                player_slot = ?, radiant_win = ?, duration = ?, game_mode = ?, 
+                lobby_type = ?, hero_id = ?, hero_variant = ?, start_time = ?, 
+                version = ?, kills = ?, deaths = ?, assists = ?, skill = ?, 
+                average_rank = ?, leaver_status = ?, party_size = ?, last_synced_at = GETDATE()
+        WHEN NOT MATCHED THEN
+            INSERT (match_id, account_id, player_slot, radiant_win, duration, game_mode, 
+                    lobby_type, hero_id, hero_variant, start_time, version, kills, deaths, 
+                    assists, skill, average_rank, leaver_status, party_size)
+            VALUES (source.match_id, source.account_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        
+        for m in matches:
+            match_id = m.get('match_id')
+            if not match_id:
+                continue
+                
+            radiant_win_bit = 1 if m.get('radiant_win') else 0
+            
+            core_params = (
+                m.get('player_slot'),
+                radiant_win_bit,
+                m.get('duration'),
+                m.get('game_mode'),
+                m.get('lobby_type'),
+                m.get('hero_id'),
+                m.get('hero_variant'),
+                m.get('start_time'),
+                m.get('version'),
+                m.get('kills'),
+                m.get('deaths'),
+                m.get('assists'),
+                m.get('skill'),
+                m.get('average_rank'),
+                m.get('leaver_status'),
+                m.get('party_size')
+            )
+            
+            cursor.execute(match_merge_sql, (int(match_id), int(player_id)) + core_params + core_params)
+            
+        conn.commit()
+        logging.info(f"Successfully processed match history records for player {player_id} into OpenDota.Player_Matches.")
+        return True
+
+    except Exception as e:
+        logging.error(f"Pipeline processing failed for player match history stubs {player_id}: {e}")
+        conn.rollback()
+        return False
+    finally:
+        cursor.close()
+
 # 5. This is how the connection and cursor are physically created in your main execution loop:
 def main():
     if not ACCOUNT_IDS:
@@ -173,12 +246,11 @@ def main():
         conn = mssql_python.connect(CONN_STR)
         
         for player_id in account_list:
-            # Sync parent metadata profile row first to protect foreign key mapping bounds
             profile_success = sync_opendota_player_profile(player_id, conn)
             
-            # Sync child historical names only if the profile row was written successfully
             if profile_success:
                 sync_opendota_player_aliases(player_id, conn)
+                sync_opendota_player_matches(player_id, conn)
                 
     except Exception as e:
         logging.critical(f"Master pipeline control routine collapsed: {e}")
