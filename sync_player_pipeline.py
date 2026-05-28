@@ -188,7 +188,6 @@ def sync_player_matches_from_stratz(account_id, conn):
         "User-Agent": "STRATZ_API",
         "Content-Type": "application/json"
     }
-    url = "https://api.stratz.com/graphql"
     
     cursor = conn.cursor()
     match_merge_sql = """
@@ -204,7 +203,7 @@ def sync_player_matches_from_stratz(account_id, conn):
     """
 
     skip = 0
-    take = 100
+    take = 5
     keep_fetching = True
     total_inserted = 0
 
