@@ -42,14 +42,14 @@ import logging
 import requests
 from datetime import datetime
 
-def sync_opendota_player_profile(player_id, conn):
+def sync_opendota_account_profile(account_id, conn):
     """
     Fetches a single player profile from the correct OpenDota API path
-    and upserts the data into OpenDota.Players using a single try block.
+    and upserts the data into OpenDota.Accounts using a single try block.
     """
     # FIXED LOGIC: Strict adherence to your verified URL string
-    api_url = f"https://api.opendota.com/api/players/{player_id}"
-    logging.info(f"Extracting OpenDota player profile layer for ID: {player_id}")
+    api_url = f"https://api.opendota.com/api/players/{account_id}"
+    logging.info(f"Extracting OpenDota player profile layer for ID: {account_id}")
     
     cursor = conn.cursor()
     try:
@@ -63,8 +63,8 @@ def sync_opendota_player_profile(player_id, conn):
         account_id = profile.get('account_id')
         
         if not account_id:
-            logging.warning(f"No account_id detected in the profile payload for player {player_id}. Skipping.")
-            return False
+            logging.warning(f"{api_url} not detected. Skipping.")
+            return 
 
         last_log_raw = profile.get('last_login')
         last_login = None
@@ -73,7 +73,7 @@ def sync_opendota_player_profile(player_id, conn):
             last_login = datetime.strptime(clean_ts, '%Y-%m-%d %H:%M:%S.%f')
 
         player_merge_sql = """
-        MERGE OpenDota.Players AS target
+        MERGE OpenDota.Accounts AS target
         USING (SELECT ? AS account_id) AS source
         ON (target.account_id = source.account_id)
         WHEN MATCHED THEN
@@ -106,12 +106,12 @@ def sync_opendota_player_profile(player_id, conn):
         # Get the aliases list from the root 'data' object
         aliases_list = data.get('aliases', [])
 
-        delete_sql = "DELETE FROM OpenDota.Player_Aliases WHERE account_id = ?;"
+        delete_sql = "DELETE FROM OpenDota.Account_Aliases WHERE account_id = ?;"
         cursor.execute(delete_sql, (int(account_id),))
 
         if aliases_list:
             insert_sql = """
-                INSERT INTO OpenDota.Player_Aliases (account_id, alias_name, name_since)
+                INSERT INTO OpenDota.Account_Aliases (account_id, alias_name, name_since)
                 VALUES (?, ?, ?);
             """
             for alias_obj in aliases_list:
@@ -122,16 +122,16 @@ def sync_opendota_player_profile(player_id, conn):
                     cursor.execute(insert_sql, (int(account_id), str(alias_name), name_since))
 
         conn.commit()
-        logging.info(f"Successfully processed profile records for player {account_id} into OpenDota.Players.")
-        return True
+        logging.info(f"Processed {api_url} into OpenDota.Accounts and OpenDota.Account_Aliases.")
+        return 
 
     except Exception as e:
-        logging.error(f"Pipeline processing failed with OpenDota for player profile {player_id}: {e}")
+        logging.error(f"{sys._getframe().f_code.co_name}: {api_url} processing failed: {e}")
         logging.error(f"Query: {player_merge_sql}")
         logging.error(f"Parameters: {params}")
 #       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
-        return False
+        return 
     finally:
         cursor.close()
 
@@ -189,14 +189,14 @@ def sync_opendota_player_profile(player_id, conn):
 #    finally:
 #        cursor.close()
 
-def sync_opendota_player_matches(player_id, conn):
+def sync_opendota_account_matches(account_id, conn):
     """
     Fetches historical match list stubs from the correct OpenDota API path
     and upserts the data into OpenDota.Player_Matches using a single try block.
     """
     # VERIFIED CORRECT URL: Strictly using the /api/players/ route
-    api_url = f"https://api.opendota.com/api/players/{player_id}/matches"
-    logging.info(f"Extracting historic match overview stubs from OpenDota for ID: {player_id}")
+    api_url = f"https://api.opendota.com/api/players/{account_id}/matches"
+    logging.info(f"Extracting historic match overview stubs from OpenDota for ID: {account_id}")
     
     cursor = conn.cursor()
     try:
@@ -208,7 +208,7 @@ def sync_opendota_player_matches(player_id, conn):
 
         # Step 2: Execute Database Upsert (MERGE) Transaction Loop
         match_merge_sql = """
-        MERGE OpenDota.Player_Matches AS target
+        MERGE OpenDota.Account_Matches AS target
         USING (SELECT ? AS match_id, ? AS account_id) AS source
         ON (target.match_id = source.match_id AND target.account_id = source.account_id)
         WHEN MATCHED THEN
@@ -250,24 +250,24 @@ def sync_opendota_player_matches(player_id, conn):
                 m.get('party_size')
             )
             
-            cursor.execute(match_merge_sql, (int(match_id), int(player_id)) + core_params + core_params)
+            cursor.execute(match_merge_sql, (int(match_id), int(account_id)) + core_params + core_params)
             
         conn.commit()
-        logging.info(f"Successfully processed match history records for player {player_id} into OpenDota.Player_Matches.")
-        return True
+        logging.info(f"Processed {len(matches)} matches from {api_url} into OpenDota.Player_Matches.")
+        return 
 
     except Exception as e:
-        logging.error(f"Pipeline processing failed with OpenDota for player match history stubs {player_id}: {e}")
+        logging.error(f"{sys._getframe().f_code.co_name}: {api_url} processing failed: {e}")
         logging.error(f"Query: {match_merge_sql}")
         logging.error(f"Match ID: {int(match_id)}")
         logging.error(f"Core Parameters: {core_params}")
 #       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
-        return False
+        return 
     finally:
         cursor.close()
 
-def get_unsynced_match_ids(conn, limit=5):
+def sync_match_ids(conn, limit=5):
     """
     Queries the database to find distinct match_ids that exist in the Player_Matches 
     table but have not yet been processed into the deep Match_Details table.
@@ -301,7 +301,7 @@ def get_unsynced_match_ids(conn, limit=5):
     finally:
         cursor.close()
 
-def sync_opendota_deep_match_details(match_id, conn):
+def sync_opendota_match_details(match_id, conn):
     """
     Fetches comprehensive match telemetry from the correct OpenDota API path
     and updates both Match_Details and Match_Player_Performances within a single try block.
@@ -366,7 +366,7 @@ def sync_opendota_deep_match_details(match_id, conn):
 
         conn.commit()
         logging.info(f"Successfully finalized deep database entries from OpenDota for Match ID {match_id}.")
-        return True
+        return 
 
     except Exception as e:
         logging.error(f"Pipeline error loading deep metrics from OpenDota for match {match_id}: {e}")
@@ -374,11 +374,11 @@ def sync_opendota_deep_match_details(match_id, conn):
         logging.error(f"Parameters: {p_params}")
 #       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
-        return False
+        return 
     finally:
         cursor.close()
 
-def sync_stratz_player_profile(account_id, conn):
+def sync_stratz_account_profile(account_id, conn):
     """
     Queries the STRATZ GraphQL API to extract player metadata metrics
     and updates both Stratz.Players and Stratz.Player_Aliases within a single try block.
@@ -386,7 +386,7 @@ def sync_stratz_player_profile(account_id, conn):
     stratz_token = os.getenv("STRATZ_TOKEN")
     if not stratz_token:
         logging.warning("STRATZ_TOKEN missing from environment configurations. Skipping STRATZ sync.")
-        return False
+        return 
 
     # EXACT EXPLICIT URL: No variations, no version numbers
     api_url = "https://api.stratz.com/graphql"
@@ -414,27 +414,28 @@ def sync_stratz_player_profile(account_id, conn):
     }
     """ % int(account_id)
 
-    logging.info(f"Extracting STRATZ player profile analytics for ID: {account_id}")
+    logging.info(f"Extracting STRATZ player profile layer for ID: {account_id}")
 
     cursor = conn.cursor()
     try:
         response = requests.post(api_url, json={"query": graphql_query}, headers=headers, timeout=15)
+        logging.info(f"Response: {response.status_code} - {response.reason}")
         response.raise_for_status()
         res_data = response.json()
 
         if "errors" in res_data:
-            logging.error(f"STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
+            logging.error(f"{sys._getframe().f_code.co_name}: STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
             logging.error(f"Query: {graphql_query}")
 #           logging.error("Traceback details:", exc_info=True)
-            return False
+            return 
 
         player_data = res_data.get("data", {}).get("player")
         if not player_data:
-            logging.warning(f"No player database metrics profile returned from STRATZ for ID: {account_id}")
-            return False
+            logging.warning(f"No account profile returned from STRATZ for ID: {account_id}")
+            return 
 
         player_merge_sql = """
-        MERGE Stratz.Players AS target
+        MERGE Stratz.Accounts AS target
         USING (SELECT ? AS steam_account_id) AS source
         ON (target.steam_account_id = source.steam_account_id)
         WHEN MATCHED THEN
@@ -462,12 +463,12 @@ def sync_stratz_player_profile(account_id, conn):
         
         cursor.execute(player_merge_sql, (int(account_id),) + core_params + core_params)
 
-        cursor.execute("DELETE FROM Stratz.Player_Aliases WHERE steam_account_id = ?;", (int(account_id),))
+        cursor.execute("DELETE FROM Stratz.Account_Aliases WHERE steam_account_id = ?;", (int(account_id),))
         
         names_list = player_data.get("names", [])
         if names_list:
             insert_alias_sql = """
-                INSERT INTO Stratz.Player_Aliases (steam_account_id, alias_name, last_seen_date_time)
+                INSERT INTO Stratz.Account_Aliases (steam_account_id, alias_name, last_seen_date_time)
                 VALUES (?, ?, ?);
             """
             for n in names_list:
@@ -476,16 +477,16 @@ def sync_stratz_player_profile(account_id, conn):
                     cursor.execute(insert_alias_sql, (int(account_id), str(alias_name), n.get("lastSeenDateTime")))
 
         conn.commit()
-        logging.info(f"Successfully processed profile records for player {account_id} into Stratz.Players and Stratz.Player_Aliases.")
-        return True
+        logging.info(f"Processed account {account_id} into Stratz.Accounts and Stratz.Account_Aliases.")
+        return 
 
     except Exception as e:
-        logging.error(f"Pipeline processing failed for STRATZ player profile components {account_id}: {e}")
+        logging.error(f"{sys._getframe().f_code.co_name}: STRATZ {account_id} processing failed: {e}")
         logging.error(f"Query: {insert_alias_sql}")
         logging.error(f"Values: {int(account_id)}, str{alias_name}, {n.get('lastSeenDateTime')}")
 #       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
-        return False
+        return 
     finally:
         cursor.close()
 
@@ -497,7 +498,7 @@ def sync_stratz_match_details(account_id, conn):
     """
     stratz_token = os.getenv("STRATZ_TOKEN")
     if not stratz_token:
-        return False
+        return 
 
     # EXACT EXPLICIT URL: No variations, no version numbers
     api_url = "https://api.stratz.com/graphql"
@@ -529,7 +530,7 @@ def sync_stratz_match_details(account_id, conn):
     }
     """ % int(account_id)
 
-    logging.info(f"Extracting granular STRATZ match analytics and player performance metrics for ID: {account_id}")
+    logging.info(f"Extracting STRATZ match and player performance data for ID: {account_id}")
 
     cursor = conn.cursor()
     try:
@@ -538,15 +539,15 @@ def sync_stratz_match_details(account_id, conn):
         res_data = response.json()
 
         if "errors" in res_data:
-            logging.error(f"STRATZ API error on deep match sync for account {account_id}: {res_data['errors']}")
+            logging.error(f"{sys._getframe().f_code.co_name}: STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
             logging.error(f"Query: {graphql_query}")
 #           logging.error("Traceback details:", exc_info=True)
-            return False
+            return 
 
         match_list = res_data.get("data", {}).get("player", {}).get("matches", []) or []
         if not match_list:
-            logging.info(f"No match analytics records returned from STRATZ for ID: {account_id}")
-            return True
+            logging.info(f"No match details records returned from STRATZ for ID: {account_id}")
+            return 
 
         header_sql = """
         MERGE Stratz.Match_Details AS target
@@ -622,68 +623,66 @@ def sync_stratz_match_details(account_id, conn):
                 cursor.execute(player_sql, (int(match_id), int(slot)) + p_params + p_params)
 
         conn.commit()
-        logging.info(f"Successfully finalized {len(match_list)} match telemetry rows for account {account_id} inside Stratz schemas.")
-        return True
+        logging.info(f"Processed {len(match_list)} matches from STRATZ for account {account_id} into Stratz.Match_Details and Stratz.Match_Player_Performances.")
+        return 
 
     except Exception as e:
-        logging.error(f"Pipeline transaction failed processing STRATZ match data for {account_id}: {e}")
+        logging.error(f"{sys._getframe().f_code.co_name}: STRATZ {account_id} match data processing failed: {e}")
         logging.error(f"Match Details Query: {header_sql}") if header_sql else None
         logging.error(f"Match Details Parameters: {h_params}") if h_params else None
         logging.error(f"Match Player Performance Query: {player_sql}") if player_sql else None
         logging.error(f"Match Player Performance Parameters: {p_params}") if p_params else None
 #       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
-        return False
+        return 
     finally:
         cursor.close()
 
 # 5. This is how the connection and cursor are physically created in your main execution loop:
 def main():
     if not ACCOUNT_IDS:
-        logging.warning("No tracking IDs identified inside ACCOUNT_IDS in your .env file.")
+        logging.warning("No account IDs identified.")
         return
 
     account_list = [aid.strip() for aid in ACCOUNT_IDS.split(",") if aid.strip()]
     
     conn = None
     try:
-        logging.info("Opening master pipeline database connection to SQL Server.")
+        logging.info("Opening database connection to SQL Server.")
         
         # Open the connection using mssql_python
         conn = mssql_python.connect(CONN_STR)
         
         # PHASE 1: Collect profiles, aliases, and historical stubs across all players
-        for player_id in account_list:
-            profile_success = sync_opendota_player_profile(player_id, conn)
-            
-            if profile_success:
-#                sync_opendota_player_aliases(player_id, conn)
-                sync_opendota_player_matches(player_id, conn)
-                
-                # Layer on STRATZ profile metadata tracking sandboxes
-                sync_stratz_player_profile(player_id, conn)
-                sync_stratz_match_details(player_id, conn)
+        for account_id in account_list:
+            sync_opendota_account_profile(account_id, conn)
+#           sync_opendota_player_aliases(account_id, conn)
+            sync_stratz_account_profile(account_id, conn)
+            sync_opendota_account_matches(account_id, conn)
+            sync_stratz_match_details(account_id, conn)
         
         # PHASE 2: Automatically discover missing matches from the combined pool
-        unsynced_matches = get_unsynced_match_ids(conn, limit=5)
+        # Since Stratz appears to have more matches tied to an account, use both OpenDota and Stratz as a source
+        # to get match details from OpenDota 
+        matches_to_sync = sync_match_ids(conn, limit=5)
         
         # PHASE 3: Deep crawl match detail data layers
-        if unsynced_matches:
-            logging.info(f"Discovered {len(unsynced_matches)} missing match profiles. Starting crawlers.")
-            for match_row in unsynced_matches:
+        if matches_to_sync:
+            logging.info(f"Found {len(matches_to_sync)} matches to sync into OpenDota.Match_Details. Starting crawlers.")
+            for match_row in matches_to_sync:
                 # Extract integer match_id safely from the row item query result
                 match_id = match_row
-                sync_opendota_deep_match_details(match_id, conn)
+                sync_opendota_match_details(match_id, conn)
                 time.sleep(1.1)  # Space calls out to stay well clear of standard public api tier blocking rules
         else:
-            logging.info("OpenDota details tables are completely synchronized.")
+            logging.info("OpenDota.Match_Details is in sync.")
                 
     except Exception as e:
         logging.critical(f"Master pipeline control routine collapsed: {e}")
     finally:
         if conn:
             conn.close()
-            logging.info("Pipeline database connection safely closed.")
+            logging.info("Database connection safely closed.")
 
 if __name__ == "__main__":
     main()

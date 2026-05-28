@@ -3,8 +3,8 @@ CREATE SCHEMA OpenDota;
 GO
 
 -- 1. Master Profile Table
-CREATE TABLE OpenDota.Players (
-    account_id BIGINT CONSTRAINT PK_OpenDota_Players PRIMARY KEY,
+CREATE TABLE OpenDota.Accounts (
+    account_id BIGINT CONSTRAINT PK_OpenDota_Accounts PRIMARY KEY,
     tracked_until BIGINT,
     solo_competitive_rank INT,
     competitive_rank INT,
@@ -23,22 +23,22 @@ CREATE TABLE OpenDota.Players (
     loccountrycode VARCHAR(10),
     is_contributor BIT,
     is_subscriber BIT,
-    last_updated_at DATETIME CONSTRAINT DF_OpenDota_Players_last_updated DEFAULT GETDATE()
+    last_updated_at DATETIME CONSTRAINT DF_OpenDota_Accounts_last_updated DEFAULT GETDATE()
 );
 
 -- 2. One-to-Many Profile Aliases Table
-CREATE TABLE OpenDota.Player_Aliases (
-    alias_id INT IDENTITY(1,1) CONSTRAINT PK_OpenDota_Player_Aliases PRIMARY KEY,
+CREATE TABLE OpenDota.Account_Aliases (
+    alias_id INT IDENTITY(1,1) CONSTRAINT PK_OpenDota_Account_Aliases PRIMARY KEY,
     account_id BIGINT,
     alias_name NVARCHAR(255) NOT NULL,
     name_since DATETIME,
-    CONSTRAINT FK_OpenDota_Player_Aliases_Players FOREIGN KEY (account_id) 
-        REFERENCES OpenDota.Players(account_id),
-    CONSTRAINT UQ_OpenDota_Player_Aliases UNIQUE (alias_name, name_since)
+    CONSTRAINT FK_OpenDota_Account_Aliases_Accounts FOREIGN KEY (account_id) 
+        REFERENCES OpenDota.Accounts(account_id),
+    CONSTRAINT UQ_OpenDota_Account_Aliases UNIQUE (alias_name, name_since)
 );
 
 -- 3. Composite History Matches Table
-CREATE TABLE OpenDota.Player_Matches (
+CREATE TABLE OpenDota.Account_Matches (
     match_id BIGINT NOT NULL,
     account_id BIGINT NOT NULL,
     player_slot INT NULL,
@@ -57,10 +57,10 @@ CREATE TABLE OpenDota.Player_Matches (
     average_rank INT NULL,
     leaver_status INT NULL,
     party_size INT NULL,
-    last_synced_at DATETIME CONSTRAINT DF_OpenDota_Player_Matches_last_synced DEFAULT GETDATE(),
-    CONSTRAINT PK_OpenDota_Player_Matches PRIMARY KEY CLUSTERED (match_id, account_id),
-    CONSTRAINT FK_OpenDota_Player_Matches_Players FOREIGN KEY (account_id) 
-        REFERENCES OpenDota.Players(account_id)
+    last_synced_at DATETIME CONSTRAINT DF_OpenDota_Account_Matches_last_synced DEFAULT GETDATE(),
+    CONSTRAINT PK_OpenDota_Account_Matches PRIMARY KEY CLUSTERED (match_id, account_id),
+    CONSTRAINT FK_OpenDota_Account_Matches_Accounts FOREIGN KEY (account_id) 
+        REFERENCES OpenDota.Accounts(account_id)
 );
 
 -- 4. Deep Match Overview Configurations Header Table
@@ -118,7 +118,7 @@ CREATE TABLE OpenDota.Match_Player_Performances (
     lose BIT NULL,
     last_updated_at DATETIME DEFAULT GETDATE(),
     CONSTRAINT PK_OpenDota_Match_Player_Performances PRIMARY KEY CLUSTERED (match_id, player_slot),
-    CONSTRAINT FK_OpenDota_Match_Player_Performances_Details FOREIGN KEY (match_id) 
+    CONSTRAINT FK_OpenDota_Match_Player_Performances_Match_Details FOREIGN KEY (match_id) 
         REFERENCES OpenDota.Match_Details(match_id) ON DELETE CASCADE
 );
 GO
@@ -129,8 +129,8 @@ CREATE SCHEMA Stratz;
 GO
 
 -- 1. Master Profile Table
-CREATE TABLE Stratz.Players (
-    steam_account_id BIGINT CONSTRAINT PK_Stratz_Players PRIMARY KEY,
+CREATE TABLE Stratz.Accounts (
+    steam_account_id BIGINT CONSTRAINT PK_Stratz_Accounts PRIMARY KEY,
     match_count INT NULL,
     win_count INT NULL,
     imp INT NULL,
@@ -139,17 +139,17 @@ CREATE TABLE Stratz.Players (
     last_match_region_id INT NULL,
     behavior_score INT NULL,
     is_followed BIT NULL,
-    last_updated_at DATETIME CONSTRAINT DF_Stratz_Players_last_updated DEFAULT GETDATE()
+    last_updated_at DATETIME CONSTRAINT DF_Stratz_Accounts_last_updated DEFAULT GETDATE()
 );
 
 -- 2. One-to-Many Profile Aliases Table
-CREATE TABLE Stratz.Player_Aliases (
-    alias_id INT IDENTITY(1,1) CONSTRAINT PK_Stratz_Player_Aliases PRIMARY KEY,
+CREATE TABLE Stratz.Account_Aliases (
+    alias_id INT IDENTITY(1,1) CONSTRAINT PK_Stratz_Account_Aliases PRIMARY KEY,
     steam_account_id BIGINT,
     alias_name NVARCHAR(255) NOT NULL,
     last_seen_date_time BIGINT NULL,
-    CONSTRAINT FK_Stratz_Player_Aliases_Players FOREIGN KEY (steam_account_id) 
-        REFERENCES Stratz.Players(steam_account_id)
+    CONSTRAINT FK_Stratz_Account_Aliases_Accounts FOREIGN KEY (steam_account_id) 
+        REFERENCES Stratz.Accounts(steam_account_id)
 );
 
 -- 3. Deep Match Overview Configuration Header Table
@@ -227,7 +227,7 @@ CREATE TABLE Stratz.Match_Player_Performances (
     variant INT NULL,
     last_updated_at DATETIME CONSTRAINT DF_Stratz_Match_Player_Performances_last_updated DEFAULT GETDATE(),
     CONSTRAINT PK_Stratz_Match_Player_Performances PRIMARY KEY CLUSTERED (match_id, player_slot),
-    CONSTRAINT FK_Stratz_Match_Player_Performances_Details FOREIGN KEY (match_id) 
+    CONSTRAINT FK_Stratz_Match_Player_Performances_Match_Details FOREIGN KEY (match_id) 
         REFERENCES Stratz.Match_Details(match_id)
 );
 GO
