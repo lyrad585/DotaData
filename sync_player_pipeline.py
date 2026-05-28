@@ -3,6 +3,7 @@ import logging
 import sys
 import requests
 import mssql_python
+import time
 from dotenv import load_dotenv
 
 # Initialize environment variables
@@ -211,66 +212,38 @@ def sync_player_matches_from_stratz(account_id, conn):
 
     while keep_fetching:
         # STRATZ GraphQL Query mapping essential stub metrics
-        graphql_query = """
-            query(GetPlayerMatchIds) {
-                player(steamAccountId: $steamId) {
-                    matches(request: { skip: $skip, take: $take }) {
-                        id
-                        startDateTime
-                        durationSeconds
-                        gameMode
-                        players(steamId: $steamId) {
-                            playerSlot
-                            isRadiant
-                            isVictory
-                            heroId
+
+        try:
+            query = """
+                query GetPlayerMatchIds {
+                    player(steamAccountId: %d) {
+                        matches(request: { skip: %d, take: %d }) {
+                            id
+                            startDateTime
+                            durationSeconds
+                            gameMode
+                            players(steamAccountId: %d) {
+                                playerSlot
+                                isRadiant
+                                isVictory
+                                heroId
+                            }
                         }
                     }
                 }
-            }
-        """
-        
-        variables = {
-            "steamId": int(account_id),
-            "skip": skip,
-            "take": take
-        }
+            """ % (int(account_id), skip, take, int(account_id))
 
-        try:
-#            query = """
-#                query GetPlayerMatchIds {
-#                player(steamAccountId: %d) {
-#                    matches(request: { skip: %d, take: 100 }) {
-#                    id
-#                    }
-#                }
-#                }
-#            """ % (
-#                account_id,
-#                records_to_skip,
-#            )
-#
-#            payload = {"query": query}
-#            response = requests.post(
-#                "https://api.stratz.com/graphql", json=payload, headers=headers
-#            )
-#            response.raise_for_status()
-#            logging.info(f"API Response Status: {response.status_code}")
-#            matches = response.json()
-#            match_ids = [
-#                match["id"] for match in matches["data"]["player"]["matches"]
-#            ]
-#            logging.info(f"Total matches fetched from STRATZ: {len(match_ids)}")
-
-
-
-            print("1")
-            response = requests.post(url, json={"query": graphql_query, "variables": variables}, headers=headers, timeout=20)
-            print("2")
+            payload = {"query": query}
+            response = requests.post(
+                "https://api.stratz.com/graphql", json=payload, headers=headers
+            )
             response.raise_for_status()
-            print("3")
+            logging.info(f"API Response Status: {response.status_code}")
             res_data = response.json()
-            print("4")
+            match_ids = [
+                match["id"] for match in res_data["data"]["player"]["matches"]
+            ]
+            logging.info(f"Total matches fetched from STRATZ: {len(match_ids)}")
             
             # Check for structural errors returning inside the GraphQL context payload
             if "errors" in res_data:
@@ -315,11 +288,12 @@ def sync_player_matches_from_stratz(account_id, conn):
             else:
                 skip += take  # Shift pagination window forward
 
+            time.sleep(1.1)
+
         except Exception as err:
             logging.error(f"STRATZ match sync loop encountered a critical error for player {account_id}: {err}")
-            logging.error(f"GraphQL Query: {graphql_query}")
-            logging.error(f"Variables: {variables}")
-##            logging.error("Traceback details:", exc_info=True)
+            logging.error(f"GraphQL Query: {query}")
+#            logging.error("Traceback details:", exc_info=True)
             conn.rollback()
             keep_fetching = False
 
