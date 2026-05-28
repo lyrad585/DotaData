@@ -54,9 +54,11 @@ def sync_opendota_player_profile(player_id, conn):
     cursor = conn.cursor()
     try:
         response = requests.get(api_url, timeout=10)
+        logging.info(f"Response: {response.status_code} - {response.reason}")
         response.raise_for_status()
         data = response.json()
 
+        # Get the profile data from the root 'data' object
         profile = data.get('profile', {}) or {}
         account_id = profile.get('account_id')
         
@@ -100,42 +102,8 @@ def sync_opendota_player_profile(player_id, conn):
         )
         
         cursor.execute(player_merge_sql, params + params[1:])
-        conn.commit()
-        logging.info(f"Successfully processed profile records for player {account_id} into OpenDota.Players.")
-        return True
 
-    except Exception as e:
-        logging.error(f"Pipeline processing failed with OpenDota for player profile {player_id}: {e}")
-        logging.error(f"Query: {player_merge_sql}")
-        logging.error(f"Parameters: {params}")
-#       logging.error("Traceback details:", exc_info=True)
-        conn.rollback()
-        return False
-    finally:
-        cursor.close()
-
-def sync_opendota_player_aliases(player_id, conn):
-    """
-    Fetches profile telemetry data from OpenDota, extracts the historical aliases list,
-    and populates OpenDota.Player_Aliases using a single, unified try block.
-    """
-    api_url = f"https://api.opendota.com/api/players/{player_id}"
-    logging.info(f"Extracting historical aliases from OpenDota for ID: {player_id}")
-    
-    cursor = conn.cursor()
-    try:
-        response = requests.get(api_url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-
-        profile = data.get('profile', {}) or {}
-        account_id = profile.get('account_id')
-        
-        if not account_id:
-            logging.warning(f"No valid account_id found for alias tracking on player {player_id}. Skipping.")
-            return False
-
-        # FIX 1: Extract aliases from root 'data', not nested 'profile'
+        # Get the aliases list from the root 'data' object
         aliases_list = data.get('aliases', [])
 
         delete_sql = "DELETE FROM OpenDota.Player_Aliases WHERE account_id = ?;"
@@ -154,18 +122,72 @@ def sync_opendota_player_aliases(player_id, conn):
                     cursor.execute(insert_sql, (int(account_id), str(alias_name), name_since))
 
         conn.commit()
-        logging.info(f"Successfully synchronized {len(aliases_list)} aliases for account {account_id} into OpenDota.Player_Aliases.")
+        logging.info(f"Successfully processed profile records for player {account_id} into OpenDota.Players.")
         return True
 
     except Exception as e:
-        logging.error(f"Pipeline processing failed with OpenDota for player aliases {player_id}: {e}")
-        logging.error(f"Query: {insert_sql}")
-        logging.error(f"Values: {int(account_id)}, str{alias_name}, {name_since}")
+        logging.error(f"Pipeline processing failed with OpenDota for player profile {player_id}: {e}")
+        logging.error(f"Query: {player_merge_sql}")
+        logging.error(f"Parameters: {params}")
 #       logging.error("Traceback details:", exc_info=True)
         conn.rollback()
         return False
     finally:
         cursor.close()
+
+#def sync_opendota_player_aliases(player_id, conn):
+#    """
+#    Fetches profile telemetry data from OpenDota, extracts the historical aliases list,
+#    and populates OpenDota.Player_Aliases using a single, unified try block.
+#    """
+#    api_url = f"https://api.opendota.com/api/players/{player_id}"
+#    logging.info(f"Extracting historical aliases from OpenDota for ID: {player_id}")
+#    
+#    cursor = conn.cursor()
+#    try:
+#        response = requests.get(api_url, timeout=10)
+#        logging.info(f"Response: {response.status_code} - {response.reason}")
+#        response.raise_for_status()
+#        data = response.json()
+#
+#        profile = data.get('profile', {}) or {}
+#        account_id = profile.get('account_id')
+#        
+#        if not account_id:
+#            logging.warning(f"No valid account_id found for alias tracking on player {player_id}. Skipping.")
+#            return False
+#
+#        # FIX 1: Extract aliases from root 'data', not nested 'profile'
+#        aliases_list = data.get('aliases', [])
+#
+#        delete_sql = "DELETE FROM OpenDota.Player_Aliases WHERE account_id = ?;"
+#        cursor.execute(delete_sql, (int(account_id),))
+#
+#        if aliases_list:
+#            insert_sql = """
+#                INSERT INTO OpenDota.Player_Aliases (account_id, alias_name, name_since)
+#                VALUES (?, ?, ?);
+#            """
+#            for alias_obj in aliases_list:
+#                # FIX 2: Safely extract the structural string name from the object dictionary mapping
+#                alias_name = alias_obj.get('personaname')
+#                name_since = alias_obj.get('name_since')
+#                if alias_name:
+#                    cursor.execute(insert_sql, (int(account_id), str(alias_name), name_since))
+#
+#        conn.commit()
+#        logging.info(f"Successfully synchronized {len(aliases_list)} aliases for account {account_id} into OpenDota.Player_Aliases.")
+#        return True
+#
+#    except Exception as e:
+#        logging.error(f"Pipeline processing failed with OpenDota for player aliases {player_id}: {e}")
+#        logging.error(f"Query: {insert_sql}")
+#        logging.error(f"Values: {int(account_id)}, str{alias_name}, {name_since}")
+##       logging.error("Traceback details:", exc_info=True)
+#        conn.rollback()
+#        return False
+#    finally:
+#        cursor.close()
 
 def sync_opendota_player_matches(player_id, conn):
     """
@@ -180,6 +202,7 @@ def sync_opendota_player_matches(player_id, conn):
     try:
         # Step 1: Hit the network API endpoint
         response = requests.get(api_url, timeout=15)
+        logging.info(f"Response: {response.status_code} - {response.reason}")
         response.raise_for_status()
         matches = response.json()
 
@@ -291,6 +314,7 @@ def sync_opendota_deep_match_details(match_id, conn):
     try:
         # Step 1: Hit the network API endpoint
         response = requests.get(api_url, timeout=15)
+        logging.info(f"Response: {response.status_code} - {response.reason}")
         response.raise_for_status()
         m = response.json()
 
@@ -632,12 +656,8 @@ def main():
         for player_id in account_list:
             profile_success = sync_opendota_player_profile(player_id, conn)
             
-        # PHASE 1: Collect profile layers and match stub entries
-        for player_id in account_list:
-            profile_success = sync_opendota_player_profile(player_id, conn)
-            
             if profile_success:
-                sync_opendota_player_aliases(player_id, conn)
+#                sync_opendota_player_aliases(player_id, conn)
                 sync_opendota_player_matches(player_id, conn)
                 
                 # Layer on STRATZ profile metadata tracking sandboxes
