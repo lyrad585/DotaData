@@ -26,7 +26,7 @@ DB_DATABASE = os.getenv("DB_DATABASE")
 ACCOUNT_IDS = os.getenv("ACCOUNT_IDS", "")
 
 if not DB_SERVER or not DB_DATABASE:
-    logging.critical("Missing DB configuration (DB_SERVER or DB_DATABASE) inside your .env file. Terminating.")
+    logging.critical("{sys._getframe().f_code.co_name}: Missing DB configuration (DB_SERVER or DB_DATABASE) inside your .env file. Terminating.")
     sys.exit(1)
 
 # 4. Assemble your standard Microsoft SQL Server connection string parameters
@@ -49,7 +49,7 @@ def sync_opendota_account_profile(account_id, conn):
     """
     # FIXED LOGIC: Strict adherence to your verified URL string
     api_url = f"https://api.opendota.com/api/players/{account_id}"
-    logging.info(f"Extracting OpenDota player profile layer for ID: {account_id}")
+    logging.info(f"{sys._getframe().f_code.co_name}: Extracting OpenDota player profile layer for ID: {account_id}")
     
     cursor = conn.cursor()
     try:
@@ -63,7 +63,7 @@ def sync_opendota_account_profile(account_id, conn):
         account_id = profile.get('account_id')
         
         if not account_id:
-            logging.warning(f"{api_url} not detected. Skipping.")
+            logging.warning(f"{sys._getframe().f_code.co_name}: {api_url} not detected. Skipping.")
             return 
 
         last_log_raw = profile.get('last_login')
@@ -196,7 +196,7 @@ def sync_opendota_account_matches(account_id, conn):
     """
     # VERIFIED CORRECT URL: Strictly using the /api/players/ route
     api_url = f"https://api.opendota.com/api/players/{account_id}/matches"
-    logging.info(f"Extracting historic match overview stubs from OpenDota for ID: {account_id}")
+    logging.info(f"{sys._getframe().f_code.co_name}: Extracting historic match overview stubs from OpenDota for ID: {account_id}")
     
     cursor = conn.cursor()
     try:
@@ -272,7 +272,7 @@ def sync_match_ids(conn):
     Queries the database to find distinct match_ids that exist in the Player_Matches 
     table but have not yet been processed into the deep Match_Details table.
     """
-    logging.info("Querying OpenDota and Stratz tables to sync matches...")
+    logging.info(f"{sys._getframe().f_code.co_name}: Querying OpenDota and Stratz tables to sync matches...")
     
     cursor = conn.cursor()
     try:
@@ -304,7 +304,7 @@ def sync_match_ids(conn):
         return match_ids
 
     except Exception as e:
-        logging.error(f"Failed to identify and queue un-synced match items: {e}")
+        logging.error(f"{sys._getframe().f_code.co_name}: Failed to identify and queue un-synced match items: {e}")
         logging.error(f"Query: {query}")
 #       logging.error("Traceback details:", exc_info=True)
         return []
@@ -318,7 +318,7 @@ def sync_opendota_match_details(match_id, conn):
     """
     # FIXED: Verified exact functional endpoint path
     api_url = f"https://api.opendota.com/api/matches/{match_id}"
-    logging.info(f"Extracting granular deep data metrics block from OpenDota for Match ID: {match_id}")
+    logging.info(f"{sys._getframe().f_code.co_name}: Extracting granular deep data metrics block from OpenDota for Match ID: {match_id}")
     
     cursor = conn.cursor()
     try:
@@ -395,7 +395,7 @@ def sync_stratz_account_profile(account_id, conn):
     """
     stratz_token = os.getenv("STRATZ_TOKEN")
     if not stratz_token:
-        logging.warning("STRATZ_TOKEN missing from environment configurations. Skipping STRATZ sync.")
+        logging.warning(f"{sys._getframe().f_code.co_name}: STRATZ_TOKEN missing from environment configurations. Skipping STRATZ sync.")
         return 
 
     # EXACT EXPLICIT URL: No variations, no version numbers
@@ -424,7 +424,7 @@ def sync_stratz_account_profile(account_id, conn):
     }
     """ % int(account_id)
 
-    logging.info(f"Extracting STRATZ player profile layer for ID: {account_id}")
+    logging.info(f"{sys._getframe().f_code.co_name}: Extracting STRATZ player profile layer for ID: {account_id}")
 
     cursor = conn.cursor()
     try:
@@ -441,7 +441,7 @@ def sync_stratz_account_profile(account_id, conn):
 
         player_data = res_data.get("data", {}).get("player")
         if not player_data:
-            logging.warning(f"No account profile returned from STRATZ for ID: {account_id}")
+            logging.warning(f"{sys._getframe().f_code.co_name}: No account profile returned from STRATZ for ID: {account_id}")
             return 
 
         player_merge_sql = """
@@ -546,7 +546,7 @@ def sync_stratz_match_details(account_id, conn):
         }
         """ % (int(account_id), skip, take)
 
-        logging.info(f"Extracting STRATZ match and player performance data for ID: {account_id}, skip: {skip}, take: {take}, total_inserted: {total_inserted}")
+        logging.info(f"{sys._getframe().f_code.co_name}: Extracting STRATZ match and player performance data for ID: {account_id}, skip: {skip}, take: {take}, total_inserted: {total_inserted}")
 
         cursor = conn.cursor()
         try:
@@ -671,14 +671,14 @@ def sync_stratz_match_details(account_id, conn):
 # 5. This is how the connection and cursor are physically created in your main execution loop:
 def main():
     if not ACCOUNT_IDS:
-        logging.warning("No account IDs identified.")
+        logging.warning(f"{sys._getframe().f_code.co_name}: No account IDs identified.")
         return
 
     account_list = [aid.strip() for aid in ACCOUNT_IDS.split(",") if aid.strip()]
     
     conn = None
     try:
-        logging.info("Opening database connection to SQL Server.")
+        logging.info(f"{sys._getframe().f_code.co_name}: Opening database connection to SQL Server.")
         
         # Open the connection using mssql_python
         conn = mssql_python.connect(CONN_STR)
@@ -698,17 +698,17 @@ def main():
         
         # PHASE 3: Deep crawl match detail data layers
         if matches_to_sync:
-            logging.info(f"Found {len(matches_to_sync)} matches to sync into OpenDota.Match_Details. Starting crawlers.")
+            logging.info(f"{sys._getframe().f_code.co_name}: Found {len(matches_to_sync)} matches to sync into OpenDota.Match_Details. Starting crawlers.")
             for match_row in matches_to_sync:
                 # Extract integer match_id safely from the row item query result
                 match_id = match_row
                 sync_opendota_match_details(match_id, conn)
                 time.sleep(1.1)  # Space calls out to stay well clear of standard public api tier blocking rules
         else:
-            logging.info("OpenDota.Match_Details is in sync.")
+            logging.info(f"{sys._getframe().f_code.co_name}: OpenDota.Match_Details is in sync.")
                 
     except Exception as e:
-        logging.critical(f"Master pipeline control routine collapsed: {e}")
+        logging.critical(f"{sys._getframe().f_code.co_name}: Master pipeline control routine collapsed: {e}")
     finally:
         if conn:
             conn.close()
