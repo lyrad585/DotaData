@@ -23,7 +23,7 @@ CREATE TABLE OpenDota.Accounts (
     loccountrycode VARCHAR(10),
     is_contributor BIT,
     is_subscriber BIT,
-    last_updated_at DATETIME CONSTRAINT DF_OpenDota_Accounts_last_updated DEFAULT GETDATE()
+    last_updated_at DATETIME CONSTRAINT DF_OpenDota_Accounts_last_updated DEFAULT getdate()
 );
 
 -- 2. One-to-Many Profile Aliases Table
