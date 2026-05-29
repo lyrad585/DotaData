@@ -1,3 +1,6 @@
+# In OpenDota.Account_Matches and Stratz.Account_Matchese, barracks_status_dire values are not the same between OpenDota and Stratz.
+# Alias entries between OpenDota and Stratz appear to be tracked differently but accurate for the most part.
+
 import os
 import sys
 import logging
@@ -106,20 +109,26 @@ def sync_opendota_account_profile(account_id, conn):
         # Get the aliases list from the root 'data' object
         aliases_list = data.get('aliases', [])
 
-        delete_sql = "DELETE FROM OpenDota.Account_Aliases WHERE account_id = ?;"
-        cursor.execute(delete_sql, (int(account_id),))
-
         if aliases_list:
+#            delete_sql = "DELETE FROM OpenDota.Account_Aliases WHERE account_id = ?;"
+#            cursor.execute(delete_sql, (int(account_id),))
+
             insert_sql = """
                 INSERT INTO OpenDota.Account_Aliases (account_id, alias_name, name_since)
-                VALUES (?, ?, ?);
+                SELECT ?, ?, ? 
+                WHERE NOT IN (
+                    SELECT 1 
+                    FROM OpenDota.Account_Aliases 
+                    WHERE account_id = ?
+                    AND name_since = ?
+                );
             """
             for alias_obj in aliases_list:
                 # FIX 2: Safely extract the structural string name from the object dictionary mapping
                 alias_name = alias_obj.get('personaname')
                 name_since = alias_obj.get('name_since')
                 if alias_name:
-                    cursor.execute(insert_sql, (int(account_id), str(alias_name), name_since))
+                    cursor.execute(insert_sql, (int(account_id), str(alias_name), name_since), (int(account_id), name_since))
 
         conn.commit()
         logging.info(f"Processed {api_url} into OpenDota.Accounts and OpenDota.Account_Aliases.")
@@ -134,60 +143,6 @@ def sync_opendota_account_profile(account_id, conn):
         return 
     finally:
         cursor.close()
-
-#def sync_opendota_player_aliases(player_id, conn):
-#    """
-#    Fetches profile telemetry data from OpenDota, extracts the historical aliases list,
-#    and populates OpenDota.Player_Aliases using a single, unified try block.
-#    """
-#    api_url = f"https://api.opendota.com/api/players/{player_id}"
-#    logging.info(f"Extracting historical aliases from OpenDota for ID: {player_id}")
-#    
-#    cursor = conn.cursor()
-#    try:
-#        response = requests.get(api_url, timeout=10)
-#        logging.info(f"Response: {response.status_code} - {response.reason}")
-#        response.raise_for_status()
-#        data = response.json()
-#
-#        profile = data.get('profile', {}) or {}
-#        account_id = profile.get('account_id')
-#        
-#        if not account_id:
-#            logging.warning(f"No valid account_id found for alias tracking on player {player_id}. Skipping.")
-#            return False
-#
-#        # FIX 1: Extract aliases from root 'data', not nested 'profile'
-#        aliases_list = data.get('aliases', [])
-#
-#        delete_sql = "DELETE FROM OpenDota.Player_Aliases WHERE account_id = ?;"
-#        cursor.execute(delete_sql, (int(account_id),))
-#
-#        if aliases_list:
-#            insert_sql = """
-#                INSERT INTO OpenDota.Player_Aliases (account_id, alias_name, name_since)
-#                VALUES (?, ?, ?);
-#            """
-#            for alias_obj in aliases_list:
-#                # FIX 2: Safely extract the structural string name from the object dictionary mapping
-#                alias_name = alias_obj.get('personaname')
-#                name_since = alias_obj.get('name_since')
-#                if alias_name:
-#                    cursor.execute(insert_sql, (int(account_id), str(alias_name), name_since))
-#
-#        conn.commit()
-#        logging.info(f"Successfully synchronized {len(aliases_list)} aliases for account {account_id} into OpenDota.Player_Aliases.")
-#        return True
-#
-#    except Exception as e:
-#        logging.error(f"Pipeline processing failed with OpenDota for player aliases {player_id}: {e}")
-#        logging.error(f"Query: {insert_sql}")
-#        logging.error(f"Values: {int(account_id)}, str{alias_name}, {name_since}")
-##       logging.error("Traceback details:", exc_info=True)
-#        conn.rollback()
-#        return False
-#    finally:
-#        cursor.close()
 
 def sync_opendota_account_matches(account_id, conn):
     """
@@ -473,18 +428,24 @@ def sync_stratz_account_profile(account_id, conn):
         
         cursor.execute(player_merge_sql, (int(account_id),) + core_params + core_params)
 
-        cursor.execute("DELETE FROM Stratz.Account_Aliases WHERE steam_account_id = ?;", (int(account_id),))
+#        cursor.execute("DELETE FROM Stratz.Account_Aliases WHERE steam_account_id = ?;", (int(account_id),))
         
         names_list = player_data.get("names", [])
         if names_list:
             insert_alias_sql = """
                 INSERT INTO Stratz.Account_Aliases (steam_account_id, alias_name, last_seen_date_time)
-                VALUES (?, ?, ?);
+                SELECT ?, ?, ? 
+                WHERE NOT IN (
+                    SELECT 1 
+                    FROM Stratz.Account_Aliases 
+                    WHERE steam_account_id = ?
+                    AND last_seen_date_time = ?
+                );
             """
             for n in names_list:
                 alias_name = n.get("name")
                 if alias_name:
-                    cursor.execute(insert_alias_sql, (int(account_id), str(alias_name), n.get("lastSeenDateTime")))
+                    cursor.execute(insert_alias_sql, (int(account_id), str(alias_name), n.get("lastSeenDateTime"), int(account_id), n.get("lastSeenDateTime")))
 
         conn.commit()
         logging.info(f"Processed account {account_id} into Stratz.Accounts and Stratz.Account_Aliases.")
@@ -686,7 +647,6 @@ def main():
         # PHASE 1: Collect profiles, aliases, and historical stubs across all players
         for account_id in account_list:
             sync_opendota_account_profile(account_id, conn)
-#           sync_opendota_player_aliases(account_id, conn)
             sync_stratz_account_profile(account_id, conn)
             sync_opendota_account_matches(account_id, conn)
             sync_stratz_match_details(account_id, conn)
