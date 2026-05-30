@@ -11,13 +11,6 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 
-skip_sync_opendota_account_profile = True
-skip_sync_stratz_account_profile = True
-skip_sync_opendota_account_matches = True
-skip_sync_stratz_match_details = True
-skip_sync_opendota_match_ids = False
-traceback = False
-
 # 1. Initialize environment variables from your local .env file
 load_dotenv()
 
@@ -31,11 +24,17 @@ logging.basicConfig(
     ]
 )
 
-# 3. Pull database credentials out of the environment variables safely
 DB_SERVER = os.getenv("DB_SERVER")
 DB_DATABASE = os.getenv("DB_DATABASE")
 ACCOUNT_IDS = os.getenv("ACCOUNT_IDS", "")
+soap = os.getenv("sync_opendota_account_profile")
+ssap = os.getenv("sync_stratz_account_profile")
+soam = os.getenv("sync_opendota_account_matches")
+ssmd = os.getenv("sync_stratz_match_details")
+somi = os.getenv("sync_opendota_match_ids")
+traceback = os.getenv("traceback")
 
+# 3. Pull database credentials out of the environment variables safely
 if not DB_SERVER or not DB_DATABASE:
     logging.critical("{sys._getframe().f_code.co_name}: Missing DB configuration (DB_SERVER or DB_DATABASE) inside your .env file. Terminating.")
     sys.exit(1)
@@ -678,6 +677,15 @@ def main():
     conn = None
     try:
         logging.info(f"Opening database connection to SQL Server.")
+        logging.info(f"Opening database connection to SQL Server.")
+        logging.info(f"sync_opendota_account_profile: {soap}")
+        logging.info(f"sync_stratz_account_profile: {ssap}")
+        logging.info(f"sync_opendota_account_matches: {soam}")
+        logging.info(f"sync_stratz_match_details: {ssmd}")
+        logging.info(f"sync_opendota_match_ids: {somi}")
+        logging.info(f"traceback: {traceback}")
+        logging.info(f"Opening database connection to SQL Server.")
+        logging.info(f"Opening database connection to SQL Server.")
         
         # Open the connection using mssql_python
         conn = mssql_python.connect(CONN_STR)
@@ -685,15 +693,15 @@ def main():
         # PHASE 1: Collect profiles, aliases, and historical stubs across all players
         for account_id in account_list:
             logging.info(f"Working on account {account_id} from list {account_list}.")
-            sync_opendota_account_profile(account_id, conn) if skip_sync_opendota_account_profile == False else logging.info(f"Skipping OpenDota account profile sync for {account_id} as per configuration.")
-            sync_stratz_account_profile(account_id, conn) if skip_sync_stratz_account_profile == False else logging.info(f"Skipping Stratz account profile sync for {account_id} as per configuration.")
-            sync_opendota_account_matches(account_id, conn) if skip_sync_opendota_account_matches == False else logging.info(f"Skipping OpenDota account matches sync for {account_id} as per configuration.")
-            sync_stratz_match_details(account_id, conn) if skip_sync_stratz_match_details == False else logging.info(f"Skipping Stratz match details sync for {account_id} as per configuration.")
-        
+            sync_opendota_account_profile(account_id, conn) if soap == True else logging.info(f"Skipping OpenDota account profile sync for {account_id} as per configuration.")
+            sync_stratz_account_profile(account_id, conn) if ssap == True else logging.info(f"Skipping Stratz account profile sync for {account_id} as per configuration.")
+            sync_opendota_account_matches(account_id, conn) if soam == True else logging.info(f"Skipping OpenDota account matches sync for {account_id} as per configuration.")
+            sync_stratz_match_details(account_id, conn) if ssmd == True else logging.info(f"Skipping Stratz match details sync for {account_id} as per configuration.")
+
         # PHASE 2: Automatically discover missing matches from the combined pool
         # Since Stratz appears to have more matches tied to an account, use both OpenDota and Stratz as a source
         # to get match details from OpenDota 
-        matches_to_sync = sync_opendota_match_ids(conn) if skip_sync_opendota_match_ids == False else logging.info(f"Skipping OpenDota match ID sync for {account_id} as per configuration.")
+        matches_to_sync = sync_opendota_match_ids(conn) if somi == True else logging.info(f"Skipping OpenDota match ID sync for {account_id} as per configuration.")
         
         # PHASE 3: Deep crawl match detail data layers
         if matches_to_sync:
@@ -702,9 +710,9 @@ def main():
                 # Extract integer match_id safely from the row item query result
                 match_id = match_row
                 sync_opendota_match_details(match_id, conn)
-                time.sleep(1.2)  # Space calls out to stay well clear of standard public api tier blocking rules
+                time.sleep(1.4)  # Space calls out to stay well clear of standard public api tier blocking rules
         else:
-            logging.info(f"{sys._getframe().f_code.co_name}: OpenDota.Match_Details is in sync.") if skip_sync_opendota_match_ids == True else None
+            logging.info(f"{sys._getframe().f_code.co_name}: OpenDota.Match_Details is in sync.") if somi == True else None
                 
     except Exception as e:
         logging.critical(f"{sys._getframe().f_code.co_name}: Master pipeline control routine collapsed: {e}")
