@@ -11,6 +11,11 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 
+skip_sync_opendota_account_profile = True
+skip_sync_stratz_account_profile = True
+skip_sync_opendota_account_matches = True
+skip_sync_stratz_match_details = True
+skip_sync_opendota_match_ids = False
 traceback = False
 
 # 1. Initialize environment variables from your local .env file
@@ -533,7 +538,7 @@ def sync_stratz_match_details(account_id, conn):
     finally:
         cursor.close()
 
-def sync_match_ids(conn):
+def sync_opendota_match_ids(conn):
     """
     Queries the database to find distinct match_ids that exist in the Player_Matches 
     table but have not yet been processed into the deep Match_Details table.
@@ -680,15 +685,15 @@ def main():
         # PHASE 1: Collect profiles, aliases, and historical stubs across all players
         for account_id in account_list:
             logging.info(f"Working on account {account_id} from list {account_list}.")
-            sync_opendota_account_profile(account_id, conn)
-            sync_stratz_account_profile(account_id, conn)
-            sync_opendota_account_matches(account_id, conn)
-            sync_stratz_match_details(account_id, conn)
+            sync_opendota_account_profile(account_id, conn) if skip_sync_opendota_account_profile == False else logging.info(f"Skipping OpenDota account profile sync for {account_id} as per configuration.")
+            sync_stratz_account_profile(account_id, conn) if skip_sync_stratz_account_profile == False else logging.info(f"Skipping Stratz account profile sync for {account_id} as per configuration.")
+            sync_opendota_account_matches(account_id, conn) if skip_sync_opendota_account_matches == False else logging.info(f"Skipping OpenDota account matches sync for {account_id} as per configuration.")
+            sync_stratz_match_details(account_id, conn) if skip_sync_stratz_match_details == False else logging.info(f"Skipping Stratz match details sync for {account_id} as per configuration.")
         
         # PHASE 2: Automatically discover missing matches from the combined pool
         # Since Stratz appears to have more matches tied to an account, use both OpenDota and Stratz as a source
         # to get match details from OpenDota 
-        matches_to_sync = sync_match_ids(conn)
+        matches_to_sync = sync_opendota_match_ids(conn) if skip_sync_opendota_match_ids == False else logging.info(f"Skipping OpenDota match ID sync for {account_id} as per configuration.")
         
         # PHASE 3: Deep crawl match detail data layers
         if matches_to_sync:
@@ -699,7 +704,7 @@ def main():
                 sync_opendota_match_details(match_id, conn)
                 time.sleep(1.2)  # Space calls out to stay well clear of standard public api tier blocking rules
         else:
-            logging.info(f"{sys._getframe().f_code.co_name}: OpenDota.Match_Details is in sync.")
+            logging.info(f"{sys._getframe().f_code.co_name}: OpenDota.Match_Details is in sync.") if skip_sync_opendota_match_ids == True else None
                 
     except Exception as e:
         logging.critical(f"{sys._getframe().f_code.co_name}: Master pipeline control routine collapsed: {e}")
