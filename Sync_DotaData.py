@@ -10,6 +10,8 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 
+traceback = False
+
 # 1. Initialize environment variables from your local .env file
 load_dotenv()
 
@@ -40,10 +42,6 @@ CONN_STR = (
     "Encrypt=yes;"
     "TrustServerCertificate=yes;"
 )
-
-import logging
-import requests
-from datetime import datetime
 
 def sync_opendota_account_profile(account_id, conn):
     """
@@ -114,21 +112,21 @@ def sync_opendota_account_profile(account_id, conn):
 #            cursor.execute(delete_sql, (int(account_id),))
 
             insert_sql = """
-                INSERT INTO OpenDota.Account_Aliases (account_id, alias_name, name_since)
-                SELECT ?, ?, ? 
-                WHERE NOT IN (
-                    SELECT 1 
-                    FROM OpenDota.Account_Aliases 
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM OpenDota.Account_Aliases
                     WHERE account_id = ?
                     AND name_since = ?
-                );
+                )
+                INSERT INTO OpenDota.Account_Aliases (account_id, alias_name, name_since)
+                VALUES (?, ?, ?);
             """
             for alias_obj in aliases_list:
                 # FIX 2: Safely extract the structural string name from the object dictionary mapping
                 alias_name = alias_obj.get('personaname')
                 name_since = alias_obj.get('name_since')
                 if alias_name:
-                    cursor.execute(insert_sql, (int(account_id), str(alias_name), name_since), (int(account_id), name_since))
+                    cursor.execute(insert_sql, (int(account_id), name_since, int(account_id), str(alias_name), name_since))
 
         conn.commit()
         logging.info(f"Processed {api_url} into OpenDota.Accounts and OpenDota.Account_Aliases.")
@@ -136,9 +134,129 @@ def sync_opendota_account_profile(account_id, conn):
 
     except Exception as e:
         logging.error(f"{sys._getframe().f_code.co_name}: {api_url} processing failed: {e}")
-        logging.error(f"Query: {player_merge_sql}")
-        logging.error(f"Parameters: {params}")
-#       logging.error("Traceback details:", exc_info=True)
+        logging.error(f"Player Merge SQL: {player_merge_sql}")
+        logging.error(f"Player Merge Parameters: {params}")
+        logging.error(f"Insert SQL: {insert_sql}")
+        logging.error(f"Insert Parameters: {int(account_id)}, {str(alias_name)}, {name_since}, {int(account_id)}, {name_since}")
+        logging.error("Traceback details:", exc_info=True) if traceback else None
+        conn.rollback()
+        return 
+    finally:
+        cursor.close()
+
+def sync_stratz_account_profile(account_id, conn):
+    """
+    Queries the STRATZ GraphQL API to extract player metadata metrics
+    and updates both Stratz.Players and Stratz.Player_Aliases within a single try block.
+    """
+    stratz_token = os.getenv("STRATZ_TOKEN")
+    if not stratz_token:
+        logging.warning(f"{sys._getframe().f_code.co_name}: STRATZ_TOKEN missing from environment configurations. Skipping STRATZ sync.")
+        return 
+
+    # EXACT EXPLICIT URL: No variations, no version numbers
+    api_url = "https://api.stratz.com/graphql"
+    headers = {
+        "Authorization": f"Bearer {stratz_token}",
+        "Content-Type": "application/json"
+    }
+
+    graphql_query = """
+    query GetPlayerProfile {
+      player(steamAccountId: %d) {
+        matchCount
+        winCount
+        imp
+        firstMatchDate
+        lastMatchDate
+        lastMatchRegionId
+        behaviorScore
+        isFollowed
+        names {
+          name
+          lastSeenDateTime
+        }
+      }
+    }
+    """ % int(account_id)
+
+    logging.info(f"{sys._getframe().f_code.co_name}: Extracting STRATZ player profile layer for ID: {account_id}")
+
+    cursor = conn.cursor()
+    try:
+        response = requests.post(api_url, json={"query": graphql_query}, headers=headers, timeout=15)
+        logging.info(f"Response: {response.status_code} - {response.reason}")
+        response.raise_for_status()
+        res_data = response.json()
+
+        if "errors" in res_data:
+            logging.error(f"{sys._getframe().f_code.co_name}: STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
+            logging.error(f"Query: {graphql_query}")
+            logging.error("Traceback details:", exc_info=True) if traceback else None
+            return 
+
+        player_data = res_data.get("data", {}).get("player")
+        if not player_data:
+            logging.warning(f"{sys._getframe().f_code.co_name}: No account profile returned from STRATZ for ID: {account_id}")
+            return 
+
+        player_merge_sql = """
+        MERGE Stratz.Accounts AS target
+        USING (SELECT ? AS steam_account_id) AS source
+        ON (target.steam_account_id = source.steam_account_id)
+        WHEN MATCHED THEN
+            UPDATE SET 
+                match_count = ?, win_count = ?, imp = ?, first_match_date = ?, 
+                last_match_date = ?, last_match_region_id = ?, behavior_score = ?, 
+                is_followed = ?, last_updated_at = GETDATE()
+        WHEN NOT MATCHED THEN
+            INSERT (steam_account_id, match_count, win_count, imp, first_match_date, 
+                    last_match_date, last_match_region_id, behavior_score, is_followed)
+            VALUES (source.steam_account_id, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        
+        is_followed_bit = 1 if player_data.get("isFollowed") else 0
+        core_params = (
+            player_data.get("matchCount"),
+            player_data.get("winCount"),
+            player_data.get("imp"),
+            player_data.get("firstMatchDate"),
+            player_data.get("lastMatchDate"),
+            player_data.get("lastMatchRegionId"),
+            player_data.get("behaviorScore"),
+            is_followed_bit
+        )
+        
+        cursor.execute(player_merge_sql, (int(account_id),) + core_params + core_params)
+
+#        cursor.execute("DELETE FROM Stratz.Account_Aliases WHERE steam_account_id = ?;", (int(account_id),))
+        
+        names_list = player_data.get("names", [])
+        if names_list:
+            insert_alias_sql = """
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM Stratz.Account_Aliases
+                    WHERE steam_account_id = ?
+                    AND last_seen_date_time = ?
+                )
+                INSERT INTO Stratz.Account_Aliases (steam_account_id, alias_name, last_seen_date_time)
+                VALUES (?, ?, ?);
+            """
+            for n in names_list:
+                alias_name = n.get("name")
+                if alias_name:
+                    cursor.execute(insert_alias_sql, (int(account_id), n.get("lastSeenDateTime"), int(account_id), str(alias_name), n.get("lastSeenDateTime")))
+                    
+        conn.commit()
+        logging.info(f"Processed account {account_id} into Stratz.Accounts and Stratz.Account_Aliases.")
+        return 
+
+    except Exception as e:
+        logging.error(f"{sys._getframe().f_code.co_name}: STRATZ {account_id} processing failed: {e}")
+        logging.error(f"Query: {insert_alias_sql}")
+        logging.error(f"Values: {int(account_id)}, str{alias_name}, {n.get('lastSeenDateTime')}")
+        logging.error("Traceback details:", exc_info=True) if traceback else None
         conn.rollback()
         return 
     finally:
@@ -151,42 +269,47 @@ def sync_opendota_account_matches(account_id, conn):
     """
     # VERIFIED CORRECT URL: Strictly using the /api/players/ route
     api_url = f"https://api.opendota.com/api/players/{account_id}/matches"
-    logging.info(f"{sys._getframe().f_code.co_name}: Extracting historic match overview stubs from OpenDota for ID: {account_id}")
+    logging.info(f"{sys._getframe().f_code.co_name}: Retrieving account matches from OpenDota for account ID: {account_id}")
     
     cursor = conn.cursor()
     try:
+        query = """
+            SELECT am.match_id
+            FROM OpenDota.Account_Matches am
+            WHERE am.account_id = ?
+            ORDER BY am.match_id
+        """
+        
+        cursor.execute(query, (int(account_id),))
+        existing_match_ids = [row[0] for row in cursor.fetchall()]
+        logging.info(f"Found {len(existing_match_ids)} existing account matches for {account_id} in OpenDota.Account_Matches.")
+
         # Step 1: Hit the network API endpoint
         response = requests.get(api_url, timeout=15)
         logging.info(f"Response: {response.status_code} - {response.reason}")
         response.raise_for_status()
         matches = response.json()
+        logging.info(f"Retrieved {len(matches)} matches from {api_url}.")
 
-        # Step 2: Execute Database Upsert (MERGE) Transaction Loop
-        match_merge_sql = """
-        MERGE OpenDota.Account_Matches AS target
-        USING (SELECT ? AS match_id, ? AS account_id) AS source
-        ON (target.match_id = source.match_id AND target.account_id = source.account_id)
-        WHEN MATCHED THEN
-            UPDATE SET 
-                player_slot = ?, radiant_win = ?, duration = ?, game_mode = ?, 
-                lobby_type = ?, hero_id = ?, hero_variant = ?, start_time = ?, 
-                version = ?, kills = ?, deaths = ?, assists = ?, skill = ?, 
-                average_rank = ?, leaver_status = ?, party_size = ?, last_synced_at = GETDATE()
-        WHEN NOT MATCHED THEN
-            INSERT (match_id, account_id, player_slot, radiant_win, duration, game_mode, 
+        # Step 2: Execute Database INSERT Transaction Loop
+        insert_match_sql = """
+            INSERT INTO OpenDota.Account_Matches (match_id, account_id, player_slot, radiant_win, duration, game_mode, 
                     lobby_type, hero_id, hero_variant, start_time, version, kills, deaths, 
                     assists, skill, average_rank, leaver_status, party_size)
-            VALUES (source.match_id, source.account_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
+        insert_count = 0
         
         for m in matches:
             match_id = m.get('match_id')
-            if not match_id:
+            if not match_id or match_id in existing_match_ids:
                 continue
                 
             radiant_win_bit = 1 if m.get('radiant_win') else 0
             
             core_params = (
+                int(match_id),
+                int(account_id),
                 m.get('player_slot'),
                 radiant_win_bit,
                 m.get('duration'),
@@ -205,22 +328,189 @@ def sync_opendota_account_matches(account_id, conn):
                 m.get('party_size')
             )
             
-            cursor.execute(match_merge_sql, (int(match_id), int(account_id)) + core_params + core_params)
+            cursor.execute(insert_match_sql, core_params)
+            insert_count += 1
             
         conn.commit()
-        logging.info(f"Processed {len(matches)} matches from {api_url} into OpenDota.Account_Matches.")
+        logging.info(f"Inserted {insert_count} new matches for account {account_id} into OpenDota.Account_Matches.")
         return 
 
     except Exception as e:
         logging.error(f"{sys._getframe().f_code.co_name}: {api_url} processing failed: {e}")
-        logging.error(f"Query: {match_merge_sql}")
+        logging.error(f"Query: {insert_match_sql}")
         logging.error(f"Match ID: {int(match_id)}")
         logging.error(f"Core Parameters: {core_params}")
-#       logging.error("Traceback details:", exc_info=True)
+        logging.error("Traceback details:", exc_info=True) if traceback else None
         conn.rollback()
         return 
     finally:
         cursor.close()
+
+def sync_stratz_match_details(account_id, conn):
+    """
+    Queries the STRATZ GraphQL API to extract match history details and individual
+    player performance telemetry matrices, populating Stratz.Match_Details and 
+    Stratz.Match_Player_Performances within a single try block.
+    """
+
+    # Assume the respective player performance records already exist in Stratz.Match_Player_Performances
+    query = """
+        SELECT md.match_id
+        FROM Stratz.Match_Details md
+        ORDER BY md.match_id
+    """
+    cursor = conn.cursor()    
+    cursor.execute(query, (int(account_id),))
+    existing_match_ids = [row[0] for row in cursor.fetchall()]
+    logging.info(f"Found {len(existing_match_ids)} existing account matches for {account_id} in Stratz.Match_Details.")
+
+    stratz_token = os.getenv("STRATZ_TOKEN")
+    if not stratz_token:
+        return 
+
+    # EXACT EXPLICIT URL: No variations, no version numbers
+    api_url = "https://api.stratz.com/graphql"
+    headers = {
+        "Authorization": f"Bearer {stratz_token}",
+        "Content-Type": "application/json"
+    }
+
+    insert_match_sql = """
+        INSERT INTO Stratz.Match_Details (match_id, did_radiant_win, duration_seconds, start_date_time, end_date_time, tower_status_radiant, 
+                tower_status_dire, barracks_status_radiant, barracks_status_dire, cluster_id, first_blood_time, 
+                lobby_type, num_human_players, game_mode, is_stats, tournament_id, tournament_round, actual_rank, 
+                average_rank, average_imp, game_version_id, region_id, sequence_num, player_rank, bracket, 
+                analysis_outcome, predicted_outcome_weight, bottom_lane_outcome, mid_lane_outcome, top_lane_outcome)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    """
+
+    insert_player_sql = """
+        INSERT INTO Stratz.Match_Player_Performances(match_id, player_slot, steam_account_id, is_radiant, is_victory, hero_id, game_version_id, 
+                kills, deaths, assists, leaver_status, num_last_hits, num_denies, gold_per_minute, networth, 
+                experience_per_minute, level, gold, gold_spent, hero_damage, tower_damage, hero_healing, party_id, 
+                is_random, lane, position, streak_prediction, intentional_feeding, role, role_basic, imp, award, 
+                behavior, invisible_seconds, dota_plus_hero_xp, variant)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    """
+
+    skip = 0
+    take = 100
+    keep_fetching = True
+    total_inserted = 0
+
+    while keep_fetching:
+        total_skipped = 0
+
+        graphql_query = """
+            query GetPlayerMatchDetails {
+                player(steamAccountId: %d) {
+                    matches(request: { skip: %d, take: %d }) {
+                        id didRadiantWin durationSeconds startDateTime endDateTime
+                        towerStatusRadiant towerStatusDire barracksStatusRadiant barracksStatusDire
+                        clusterId firstBloodTime lobbyType numHumanPlayers gameMode isStats
+                        tournamentId tournamentRound actualRank averageRank averageImp
+                        gameVersionId regionId sequenceNum rank bracket analysisOutcome
+                        predictedOutcomeWeight bottomLaneOutcome midLaneOutcome topLaneOutcome
+                        players {
+                            matchId playerSlot steamAccountId isRadiant isVictory heroId
+                            gameVersionId kills deaths assists leaverStatus numLastHits numDenies
+                            goldPerMinute networth experiencePerMinute level gold goldSpent
+                            heroDamage towerDamage heroHealing partyId isRandom lane position
+                            streakPrediction intentionalFeeding role roleBasic imp award
+                            behavior invisibleSeconds dotaPlusHeroXp variant
+                        }
+                    }
+                }
+            }
+        """ % (int(account_id), skip, take)
+
+        logging.info(f"{sys._getframe().f_code.co_name}: Extracting STRATZ match and player performance data for ID: {account_id}, skip: {skip}, take: {take}, total_inserted: {total_inserted}")
+
+        cursor = conn.cursor()
+        try:
+            response = requests.post(api_url, json={"query": graphql_query}, headers=headers, timeout=25)
+            response.raise_for_status()
+            res_data = response.json()
+
+            if "errors" in res_data:
+                logging.error(f"{sys._getframe().f_code.co_name}: STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
+                logging.error(f"Query: {graphql_query}")
+                logging.error("Traceback details:", exc_info=True) if traceback else None
+                return 
+
+            match_list = res_data.get("data", {}).get("player", {}).get("matches", []) or []
+            if not match_list:
+                logging.info(f"No match details records returned from STRATZ for ID: {account_id}")
+                keep_fetching = False
+                break
+
+            for m in match_list:
+                match_id = m.get("id")
+                if not match_id:
+                    continue
+                if match_id in existing_match_ids:
+                    total_skipped += 1
+                    continue
+
+                match_params = (
+                    match_id,
+                    1 if m.get("didRadiantWin") else 0, m.get("durationSeconds"), m.get("startDateTime"), m.get("endDateTime"),
+                    m.get("towerStatusRadiant"), m.get("towerStatusDire"), m.get("barracksStatusRadiant"), m.get("barracksStatusDire"),
+                    m.get("clusterId"), m.get("firstBloodTime"), m.get("lobbyType"), m.get("numHumanPlayers"), m.get("gameMode"),
+                    1 if m.get("isStats") else 0, m.get("tournamentId"), m.get("tournamentRound"), m.get("actualRank"), m.get("averageRank"),
+                    m.get("averageImp"), m.get("gameVersionId"), m.get("regionId"), m.get("sequenceNum"), m.get("rank"),
+                    m.get("bracket"), m.get("analysisOutcome"), m.get("predictedOutcomeWeight"), m.get("bottomLaneOutcome"),
+                    m.get("midLaneOutcome"), m.get("topLaneOutcome")
+                )
+                cursor.execute(insert_match_sql, match_params)
+                total_inserted += 1
+
+                for p in m.get("players", []) or []:
+                    slot = p.get("playerSlot")
+                    if slot is None:
+                        continue
+
+                    player_params = (
+                        match_id, slot,
+                        p.get("steamAccountId"), 1 if p.get("isRadiant") else 0, 1 if p.get("isVictory") else 0,
+                        p.get("heroId"), p.get("gameVersionId"), p.get("kills"), p.get('deaths'), p.get("assists"),
+                        p.get("leaverStatus"), p.get("numLastHits"), p.get("numDenies"), p.get("goldPerMinute"),
+                        p.get("networth"), p.get("experiencePerMinute"), p.get("level"), p.get("gold"), p.get("goldSpent"),
+                        p.get("heroDamage"), p.get("towerDamage"), p.get("heroHealing"), p.get("partyId"),
+                        1 if p.get("isRandom") else 0, p.get("lane"), p.get("position"), p.get("streakPrediction"),
+                        1 if p.get("intentionalFeeding") else 0, p.get("role"), p.get("roleBasic"), p.get("imp"),
+                        p.get("award"), p.get("behavior"), p.get("invisibleSeconds"), p.get("dotaPlusHeroXp"), p.get("variant")
+                    )
+                    cursor.execute(insert_player_sql, player_params)
+
+            conn.commit()
+            logging.info(f"Inserted {total_inserted} new matches for account {account_id} into Stratz.Match_Details and Stratz.Match_Player_Performances.")
+            logging.info(f"Skipped {total_skipped} existing matches for account {account_id}.")
+
+            # If the response returned less than the requested amount, we have reached the end of their history
+            if len(match_list) < take:
+                keep_fetching = False
+            else:
+                skip += take  # Shift pagination window forward
+
+            time.sleep(1.1)
+
+
+        except Exception as e:
+            logging.error(f"{sys._getframe().f_code.co_name}: STRATZ {account_id} match data processing failed: {e}")
+            logging.error(f"Insert Match SQL: {insert_match_sql}") if insert_match_sql else None
+            logging.error(f"Insert Match Parameters: {m_params}") if m_params else None
+            logging.error(f"Match Player Performance Query: {player_sql}") if player_sql else None
+            logging.error(f"Match Player Performance Parameters: {p_params}") if p_params else None
+            logging.error("Traceback details:", exc_info=True) if traceback else None
+            keep_fetching = False
+            conn.rollback()
+            return 
+        finally:
+            cursor.close()
+
+    logging.info(f"STRATZ match extraction completed. Processed {total_inserted} matches for account {account_id}.")
+    return            
 
 def sync_match_ids(conn):
     """
@@ -261,7 +551,7 @@ def sync_match_ids(conn):
     except Exception as e:
         logging.error(f"{sys._getframe().f_code.co_name}: Failed to identify and queue un-synced match items: {e}")
         logging.error(f"Query: {query}")
-#       logging.error("Traceback details:", exc_info=True)
+        logging.error("Traceback details:", exc_info=True) if traceback else None
         return []
     finally:
         cursor.close()
@@ -337,297 +627,11 @@ def sync_opendota_match_details(match_id, conn):
         logging.error(f"{sys._getframe().f_code.co_name}: {api_url} processing failed: {e}")
         logging.error(f"Query: {player_sql}")
         logging.error(f"Parameters: {p_params}")
-#       logging.error("Traceback details:", exc_info=True)
+        logging.error("Traceback details:", exc_info=True) if traceback else None
         conn.rollback()
         return 
     finally:
         cursor.close()
-
-def sync_stratz_account_profile(account_id, conn):
-    """
-    Queries the STRATZ GraphQL API to extract player metadata metrics
-    and updates both Stratz.Players and Stratz.Player_Aliases within a single try block.
-    """
-    stratz_token = os.getenv("STRATZ_TOKEN")
-    if not stratz_token:
-        logging.warning(f"{sys._getframe().f_code.co_name}: STRATZ_TOKEN missing from environment configurations. Skipping STRATZ sync.")
-        return 
-
-    # EXACT EXPLICIT URL: No variations, no version numbers
-    api_url = "https://api.stratz.com/graphql"
-    headers = {
-        "Authorization": f"Bearer {stratz_token}",
-        "Content-Type": "application/json"
-    }
-
-    graphql_query = """
-    query GetPlayerProfile {
-      player(steamAccountId: %d) {
-        matchCount
-        winCount
-        imp
-        firstMatchDate
-        lastMatchDate
-        lastMatchRegionId
-        behaviorScore
-        isFollowed
-        names {
-          name
-          lastSeenDateTime
-        }
-      }
-    }
-    """ % int(account_id)
-
-    logging.info(f"{sys._getframe().f_code.co_name}: Extracting STRATZ player profile layer for ID: {account_id}")
-
-    cursor = conn.cursor()
-    try:
-        response = requests.post(api_url, json={"query": graphql_query}, headers=headers, timeout=15)
-        logging.info(f"Response: {response.status_code} - {response.reason}")
-        response.raise_for_status()
-        res_data = response.json()
-
-        if "errors" in res_data:
-            logging.error(f"{sys._getframe().f_code.co_name}: STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
-            logging.error(f"Query: {graphql_query}")
-#           logging.error("Traceback details:", exc_info=True)
-            return 
-
-        player_data = res_data.get("data", {}).get("player")
-        if not player_data:
-            logging.warning(f"{sys._getframe().f_code.co_name}: No account profile returned from STRATZ for ID: {account_id}")
-            return 
-
-        player_merge_sql = """
-        MERGE Stratz.Accounts AS target
-        USING (SELECT ? AS steam_account_id) AS source
-        ON (target.steam_account_id = source.steam_account_id)
-        WHEN MATCHED THEN
-            UPDATE SET 
-                match_count = ?, win_count = ?, imp = ?, first_match_date = ?, 
-                last_match_date = ?, last_match_region_id = ?, behavior_score = ?, 
-                is_followed = ?, last_updated_at = GETDATE()
-        WHEN NOT MATCHED THEN
-            INSERT (steam_account_id, match_count, win_count, imp, first_match_date, 
-                    last_match_date, last_match_region_id, behavior_score, is_followed)
-            VALUES (source.steam_account_id, ?, ?, ?, ?, ?, ?, ?, ?);
-        """
-        
-        is_followed_bit = 1 if player_data.get("isFollowed") else 0
-        core_params = (
-            player_data.get("matchCount"),
-            player_data.get("winCount"),
-            player_data.get("imp"),
-            player_data.get("firstMatchDate"),
-            player_data.get("lastMatchDate"),
-            player_data.get("lastMatchRegionId"),
-            player_data.get("behaviorScore"),
-            is_followed_bit
-        )
-        
-        cursor.execute(player_merge_sql, (int(account_id),) + core_params + core_params)
-
-#        cursor.execute("DELETE FROM Stratz.Account_Aliases WHERE steam_account_id = ?;", (int(account_id),))
-        
-        names_list = player_data.get("names", [])
-        if names_list:
-            insert_alias_sql = """
-                INSERT INTO Stratz.Account_Aliases (steam_account_id, alias_name, last_seen_date_time)
-                SELECT ?, ?, ? 
-                WHERE NOT IN (
-                    SELECT 1 
-                    FROM Stratz.Account_Aliases 
-                    WHERE steam_account_id = ?
-                    AND last_seen_date_time = ?
-                );
-            """
-            for n in names_list:
-                alias_name = n.get("name")
-                if alias_name:
-                    cursor.execute(insert_alias_sql, (int(account_id), str(alias_name), n.get("lastSeenDateTime"), int(account_id), n.get("lastSeenDateTime")))
-
-        conn.commit()
-        logging.info(f"Processed account {account_id} into Stratz.Accounts and Stratz.Account_Aliases.")
-        return 
-
-    except Exception as e:
-        logging.error(f"{sys._getframe().f_code.co_name}: STRATZ {account_id} processing failed: {e}")
-        logging.error(f"Query: {insert_alias_sql}")
-        logging.error(f"Values: {int(account_id)}, str{alias_name}, {n.get('lastSeenDateTime')}")
-#       logging.error("Traceback details:", exc_info=True)
-        conn.rollback()
-        return 
-    finally:
-        cursor.close()
-
-def sync_stratz_match_details(account_id, conn):
-    """
-    Queries the STRATZ GraphQL API to extract match history details and individual
-    player performance telemetry matrices, populating Stratz.Match_Details and 
-    Stratz.Match_Player_Performances within a single try block.
-    """
-    stratz_token = os.getenv("STRATZ_TOKEN")
-    if not stratz_token:
-        return 
-
-    # EXACT EXPLICIT URL: No variations, no version numbers
-    api_url = "https://api.stratz.com/graphql"
-    headers = {
-        "Authorization": f"Bearer {stratz_token}",
-        "Content-Type": "application/json"
-    }
-
-    skip = 0
-    take = 100
-    keep_fetching = True
-    total_inserted = 0
-
-    while keep_fetching:
-        graphql_query = """
-        query GetPlayerMatchDetails {
-        player(steamAccountId: %d) {
-            matches(request: { skip: %d, take: %d }) {
-            id didRadiantWin durationSeconds startDateTime endDateTime
-            towerStatusRadiant towerStatusDire barracksStatusRadiant barracksStatusDire
-            clusterId firstBloodTime lobbyType numHumanPlayers gameMode isStats
-            tournamentId tournamentRound actualRank averageRank averageImp
-            gameVersionId regionId sequenceNum rank bracket analysisOutcome
-            predictedOutcomeWeight bottomLaneOutcome midLaneOutcome topLaneOutcome
-            players {
-                matchId playerSlot steamAccountId isRadiant isVictory heroId
-                gameVersionId kills deaths assists leaverStatus numLastHits numDenies
-                goldPerMinute networth experiencePerMinute level gold goldSpent
-                heroDamage towerDamage heroHealing partyId isRandom lane position
-                streakPrediction intentionalFeeding role roleBasic imp award
-                behavior invisibleSeconds dotaPlusHeroXp variant
-            }
-            }
-        }
-        }
-        """ % (int(account_id), skip, take)
-
-        logging.info(f"{sys._getframe().f_code.co_name}: Extracting STRATZ match and player performance data for ID: {account_id}, skip: {skip}, take: {take}, total_inserted: {total_inserted}")
-
-        cursor = conn.cursor()
-        try:
-            response = requests.post(api_url, json={"query": graphql_query}, headers=headers, timeout=25)
-            response.raise_for_status()
-            res_data = response.json()
-
-            if "errors" in res_data:
-                logging.error(f"{sys._getframe().f_code.co_name}: STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
-                logging.error(f"Query: {graphql_query}")
-#                logging.error("Traceback details:", exc_info=True)
-                return 
-
-            match_list = res_data.get("data", {}).get("player", {}).get("matches", []) or []
-            if not match_list:
-                logging.info(f"No match details records returned from STRATZ for ID: {account_id}")
-                keep_fetching = False
-                break
-
-            header_sql = """
-            MERGE Stratz.Match_Details AS target
-            USING (SELECT ? AS match_id) AS source ON target.match_id = source.match_id
-            WHEN MATCHED THEN
-                UPDATE SET did_radiant_win = ?, duration_seconds = ?, start_date_time = ?, end_date_time = ?, 
-                        tower_status_radiant = ?, tower_status_dire = ?, barracks_status_radiant = ?, barracks_status_dire = ?, 
-                        cluster_id = ?, first_blood_time = ?, lobby_type = ?, num_human_players = ?, game_mode = ?, 
-                        is_stats = ?, tournament_id = ?, tournament_round = ?, actual_rank = ?, average_rank = ?, 
-                        average_imp = ?, game_version_id = ?, region_id = ?, sequence_num = ?, player_rank = ?, 
-                        bracket = ?, analysis_outcome = ?, predicted_outcome_weight = ?, bottom_lane_outcome = ?, 
-                        mid_lane_outcome = ?, top_lane_outcome = ?, last_updated_at = GETDATE()
-            WHEN NOT MATCHED THEN
-                INSERT (match_id, did_radiant_win, duration_seconds, start_date_time, end_date_time, tower_status_radiant, 
-                        tower_status_dire, barracks_status_radiant, barracks_status_dire, cluster_id, first_blood_time, 
-                        lobby_type, num_human_players, game_mode, is_stats, tournament_id, tournament_round, actual_rank, 
-                        average_rank, average_imp, game_version_id, region_id, sequence_num, player_rank, bracket, 
-                        analysis_outcome, predicted_outcome_weight, bottom_lane_outcome, mid_lane_outcome, top_lane_outcome)
-                VALUES (source.match_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """
-
-            player_sql = """
-            MERGE Stratz.Match_Player_Performances AS target
-            USING (SELECT ? AS match_id, ? AS player_slot) AS source ON target.match_id = source.match_id AND target.player_slot = source.player_slot
-            WHEN MATCHED THEN
-                UPDATE SET steam_account_id = ?, is_radiant = ?, is_victory = ?, hero_id = ?, game_version_id = ?, 
-                        kills = ?, deaths = ?, assists = ?, leaver_status = ?, num_last_hits = ?, num_denies = ?, 
-                        gold_per_minute = ?, networth = ?, experience_per_minute = ?, level = ?, gold = ?, 
-                        gold_spent = ?, hero_damage = ?, tower_damage = ?, hero_healing = ?, party_id = ?, 
-                        is_random = ?, lane = ?, position = ?, streak_prediction = ?, intentional_feeding = ?, 
-                        role = ?, role_basic = ?, imp = ?, award = ?, behavior = ?, invisible_seconds = ?, 
-                        dota_plus_hero_xp = ?, variant = ?, last_updated_at = GETDATE()
-            WHEN NOT MATCHED THEN
-                INSERT (match_id, player_slot, steam_account_id, is_radiant, is_victory, hero_id, game_version_id, 
-                        kills, deaths, assists, leaver_status, num_last_hits, num_denies, gold_per_minute, networth, 
-                        experience_per_minute, level, gold, gold_spent, hero_damage, tower_damage, hero_healing, party_id, 
-                        is_random, lane, position, streak_prediction, intentional_feeding, role, role_basic, imp, award, 
-                        behavior, invisible_seconds, dota_plus_hero_xp, variant)
-                VALUES (source.match_id, source.player_slot, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """
-
-            for m in match_list:
-                match_id = m.get("id")
-                if not match_id:
-                    continue
-
-                h_params = (
-                    1 if m.get("didRadiantWin") else 0, m.get("durationSeconds"), m.get("startDateTime"), m.get("endDateTime"),
-                    m.get("towerStatusRadiant"), m.get("towerStatusDire"), m.get("barracksStatusRadiant"), m.get("barracksStatusDire"),
-                    m.get("clusterId"), m.get("firstBloodTime"), m.get("lobbyType"), m.get("numHumanPlayers"), m.get("gameMode"),
-                    1 if m.get("isStats") else 0, m.get("tournamentId"), m.get("tournamentRound"), m.get("actualRank"), m.get("averageRank"),
-                    m.get("averageImp"), m.get("gameVersionId"), m.get("regionId"), m.get("sequenceNum"), m.get("rank"),
-                    m.get("bracket"), m.get("analysisOutcome"), m.get("predictedOutcomeWeight"), m.get("bottomLaneOutcome"),
-                    m.get("midLaneOutcome"), m.get("topLaneOutcome")
-                )
-                cursor.execute(header_sql, (int(match_id),) + h_params + h_params)
-                total_inserted += 1
-
-                for p in m.get("players", []) or []:
-                    slot = p.get("playerSlot")
-                    if slot is None:
-                        continue
-
-                    p_params = (
-                        p.get("steamAccountId"), 1 if p.get("isRadiant") else 0, 1 if p.get("isVictory") else 0,
-                        p.get("heroId"), p.get("gameVersionId"), p.get("kills"), p.get('deaths'), p.get("assists"),
-                        p.get("leaverStatus"), p.get("numLastHits"), p.get("numDenies"), p.get("goldPerMinute"),
-                        p.get("networth"), p.get("experiencePerMinute"), p.get("level"), p.get("gold"), p.get("goldSpent"),
-                        p.get("heroDamage"), p.get("towerDamage"), p.get("heroHealing"), p.get("partyId"),
-                        1 if p.get("isRandom") else 0, p.get("lane"), p.get("position"), p.get("streakPrediction"),
-                        1 if p.get("intentionalFeeding") else 0, p.get("role"), p.get("roleBasic"), p.get("imp"),
-                        p.get("award"), p.get("behavior"), p.get("invisibleSeconds"), p.get("dotaPlusHeroXp"), p.get("variant")
-                    )
-                    cursor.execute(player_sql, (int(match_id), int(slot)) + p_params + p_params)
-
-            conn.commit()
-            logging.info(f"Processed {len(match_list)} matches from STRATZ for account {account_id} into Stratz.Match_Details and Stratz.Match_Player_Performances.")
-
-            # If the response returned less than the requested amount, we have reached the end of their history
-            if len(match_list) < take:
-                keep_fetching = False
-            else:
-                skip += take  # Shift pagination window forward
-
-            time.sleep(1.1)
-
-
-        except Exception as e:
-            logging.error(f"{sys._getframe().f_code.co_name}: STRATZ {account_id} match data processing failed: {e}")
-            logging.error(f"Match Details Query: {header_sql}") if header_sql else None
-            logging.error(f"Match Details Parameters: {h_params}") if h_params else None
-            logging.error(f"Match Player Performance Query: {player_sql}") if player_sql else None
-            logging.error(f"Match Player Performance Parameters: {p_params}") if p_params else None
-    #       logging.error("Traceback details:", exc_info=True)
-            keep_fetching = False
-            conn.rollback()
-            return 
-        finally:
-            cursor.close()
-
-    logging.info(f"STRATZ match extraction completed. Processed {total_inserted} matches for account {account_id}.")
-    return            
 
 # 5. This is how the connection and cursor are physically created in your main execution loop:
 def main():
@@ -669,6 +673,7 @@ def main():
                 
     except Exception as e:
         logging.critical(f"{sys._getframe().f_code.co_name}: Master pipeline control routine collapsed: {e}")
+        logging.error("Traceback details:", exc_info=True) if traceback else None
     finally:
         if conn:
             conn.close()
