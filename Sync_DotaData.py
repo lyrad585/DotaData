@@ -181,7 +181,7 @@ def sync_stratz_account_profile(account_id, conn):
     }
 
     graphql_query = """
-        query GetPlayerProfile {
+        query GetPlayerMatchIds {
             player(steamAccountId: %d) {
                 matchCount
                 winCount
@@ -205,12 +205,23 @@ def sync_stratz_account_profile(account_id, conn):
         logging.info(f"Response: {response.status_code} - {response.reason}")
         response.raise_for_status()
         res_data = response.json()
+        logging.info(f"res_data for {account_id}:\n{res_data}.")
 
         if "errors" in res_data:
-            logging.error(f"STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
-            logging.error(f"Query: {graphql_query}") if graphql_query else None
-            logging.error("Traceback details:", exc_info=True) if traceback else None
-            return 
+            # 1. Safely extract the message from the first error object
+            errors_list = res_data.get("errors", [])
+            first_error_msg = errors_list[0].get("message", "") if errors_list else ""
+
+            # 2. Check for your specific ignorable error condition
+            if first_error_msg.startswith("Player Id is missing or anonymous"):
+                logging.info(f"Player {account_id} is missing or anonymous. Continuing processing.")
+                # Do NOT return here. Letting the code pass through allows it to continue.
+            else:
+                # 3. Handle all other legitimate API errors by logging and exiting
+                logging.error(f"STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
+                logging.error(f"Query: {graphql_query}") if graphql_query else None
+                logging.error("Traceback details:", exc_info=True) if traceback else None
+                return
 
         player_data = res_data.get("data", {}).get("player")
         if not player_data:
@@ -722,7 +733,7 @@ def main():
         
         # PHASE 1: Collect profiles, aliases, and historical stubs across all players
         for account_id in account_list:
-            logging.info(f"Working on account {account_id} from list {account_list}.")
+            logging.info(f"Working on account {account_id}.")
             sync_opendota_account_profile(account_id, conn) if soap == True else logging.info(f"Skipping OpenDota account profile sync for {account_id} as per configuration.")
             sync_stratz_account_profile(account_id, conn) if ssap == True else logging.info(f"Skipping Stratz account profile sync for {account_id} as per configuration.")
             sync_opendota_account_matches(account_id, conn) if soam == True else logging.info(f"Skipping OpenDota account matches sync for {account_id} as per configuration.")
