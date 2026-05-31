@@ -1,3 +1,4 @@
 .env
 *.log
+opendota_sync.log
 
