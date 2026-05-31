@@ -27,12 +27,20 @@ logging.basicConfig(
 DB_SERVER = os.getenv("DB_SERVER")
 DB_DATABASE = os.getenv("DB_DATABASE")
 ACCOUNT_IDS = os.getenv("ACCOUNT_IDS", "")
-soap = os.getenv("sync_opendota_account_profile")
-ssap = os.getenv("sync_stratz_account_profile")
-soam = os.getenv("sync_opendota_account_matches")
-ssmd = os.getenv("sync_stratz_match_details")
-somi = os.getenv("sync_opendota_match_ids")
-traceback = os.getenv("traceback")
+soap = True if os.getenv("sync_opendota_account_profile_flag").lower() == "true" else False
+ssap = True if os.getenv("sync_stratz_account_profile_flag").lower() == "true" else False
+soam = True if os.getenv("sync_opendota_account_matches_flag").lower() == "true" else False
+ssmd = True if os.getenv("sync_stratz_match_details_flag").lower() == "true" else False
+somi = True if os.getenv("sync_opendota_match_ids_flag").lower() == "true" else False
+traceback = True if os.getenv("traceback_flag").lower() == "true" else False
+
+logging.info(f"Environment variables:")
+logging.info(f"\tsync_opendota_account_profile_flag: {soap}")
+logging.info(f"\tsync_stratz_account_profile_flag: {ssap}")
+logging.info(f"\tsync_opendota_account_matches_flag: {soam}")
+logging.info(f"\tsync_stratz_match_details_flag: {ssmd}")
+logging.info(f"\tsync_opendota_match_ids_flag: {somi}")
+logging.info(f"\ttraceback_flag: {traceback}")
 
 # 3. Pull database credentials out of the environment variables safely
 if not DB_SERVER or not DB_DATABASE:
@@ -354,7 +362,7 @@ def sync_opendota_account_matches(account_id, conn):
         logging.error(f"{api_url} processing failed: {e}")
         logging.error(f"Query: {insert_match_sql}")
         logging.error(f"Match ID: {int(match_id)}")
-        logging.error(f"Core Parameters: {core_params}")
+        logging.error(f"Parameters: {core_params}")
         logging.error("Traceback details:", exc_info=True) if traceback else None
         conn.rollback()
         return 
@@ -602,34 +610,43 @@ def sync_opendota_match_details(match_id, conn):
         m = response.json()
 
         # Step 2: Ingest Match Header Summary Metrics (OpenDota.Match_Details)
-        header_sql = """
-            MERGE OpenDota.Match_Details AS target
-            USING (SELECT ? AS match_id) AS source ON target.match_id = source.match_id
-            WHEN MATCHED THEN
-                UPDATE SET barracks_status_dire = ?, barracks_status_radiant = ?, cluster = ?, dire_score = ?, duration = ?, engine = ?, first_blood_time = ?, game_mode = ?, human_players = ?, match_seq_num = ?, radiant_score = ?, radiant_win = ?, skill = ?, start_time = ?, tower_status_dire = ?, tower_status_radiant = ?, version = ?, patch = ?, region = ?, last_updated_at = GETDATE()
-            WHEN NOT MATCHED THEN
-                INSERT (match_id, barracks_status_dire, barracks_status_radiant, cluster, dire_score, duration, engine, first_blood_time, game_mode, human_players, match_seq_num, radiant_score, radiant_win, skill, start_time, tower_status_dire, tower_status_radiant, version, patch, region)
-                VALUES (source.match_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        insert_match_sql = """
+            INSERT INTO OpenDota.Match_Details (
+                match_id, barracks_status_dire, barracks_status_radiant, cluster, dire_score, duration, engine, first_blood_time, 
+                game_mode, human_players, match_seq_num, radiant_score, radiant_win, skill, start_time, tower_status_dire, 
+                tower_status_radiant, version, patch, region
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        h_params = (
-            m.get('barracks_status_dire'), m.get('barracks_status_radiant'), m.get('cluster'), 
+        insert_match_params = (
+            match_id, m.get('barracks_status_dire'), m.get('barracks_status_radiant'), m.get('cluster'), 
             m.get('dire_score'), m.get('duration'), m.get('engine'), m.get('first_blood_time'), 
             m.get('game_mode'), m.get('human_players'), m.get('match_seq_num'), m.get('radiant_score'), 
             1 if m.get('radiant_win') else 0, m.get('skill'), m.get('start_time'), m.get('tower_status_dire'), 
             m.get('tower_status_radiant'), m.get('version'), m.get('patch'), m.get('region')
         )
-        logging.info(f"Inserting {api_url} into OpenDota.Match_Details and OpenDota.Match_Player_Performances.")
-        cursor.execute(header_sql, (int(match_id),) + h_params + h_params)
+        cursor.execute(insert_match_sql, insert_match_params)
+        logging.info(f"Inserted {api_url} into OpenDota.Match_Details.")
 
+    except Exception as e:
+        logging.error(f"{api_url} processing failed: {e}")
+        logging.error(f"Insert Match SQL: {insert_match_sql}") if insert_match_sql else None
+        logging.error(f"Insert Match Parameters: {insert_match_params}") if insert_match_params else None
+        logging.error("Traceback details:", exc_info=True) if traceback else None
+        conn.rollback()
+        return False
+
+    try:
         # Step 3: Ingest All 10 Participants Metrics (OpenDota.Match_Player_Performances)
-        player_sql = """
-            MERGE OpenDota.Match_Player_Performances AS target
-            USING (SELECT ? AS match_id, ? AS player_slot) AS source ON target.match_id = source.match_id AND target.player_slot = source.player_slot
-            WHEN MATCHED THEN
-                UPDATE SET account_id = ?, kills = ?, deaths = ?, assists = ?, gold = ?, gold_per_min = ?, gold_spent = ?, net_worth = ?, total_gold = ?, xp_per_min = ?, total_xp = ?, level = ?, hero_id = ?, hero_variant = ?, hero_damage = ?, hero_healing = ?, tower_damage = ?, last_hits = ?, denies = ?, kda = ?, teamfight_participation = ?, stuns = ?, win = ?, lose = ?, last_updated_at = GETDATE()
-            WHEN NOT MATCHED THEN
-                INSERT (match_id, player_slot, account_id, kills, deaths, assists, gold, gold_per_min, gold_spent, net_worth, total_gold, xp_per_min, total_xp, level, hero_id, hero_variant, hero_damage, hero_healing, tower_damage, last_hits, denies, kda, teamfight_participation, stuns, win, lose)
-                VALUES (source.match_id, source.player_slot, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        insert_player_perf_sql = """
+            INSERT INTO OpenDota.Match_Player_Performances (
+                match_id, player_slot, account_id, kills, deaths, assists, leaver_status, aghanims_scepter, aghanims_shard, 
+                moonshard, personaname, name, rank_tier, computed_mmr, is_subscriber, lobby_type, is_contributor, radiant_win, 
+                kills_per_minute, abandons, gold, gold_per_min, gold_spent, net_worth, total_gold, xp_per_min, total_xp, level, 
+                hero_id, hero_variant, hero_damage, hero_healing, tower_damage, last_hits, denies, kda, teamfight_participation, 
+                stuns, win, lose
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         
         for p in m.get('players', []):
@@ -637,8 +654,12 @@ def sync_opendota_match_details(match_id, conn):
             if slot is None: 
                 continue
                 
-            p_params = (
-                p.get('account_id'), p.get('kills'), p.get('deaths'), p.get('assists'), 
+            insert_player_perf_params = (
+                match_id, slot, p.get('account_id'), p.get('kills'), p.get('deaths'), p.get('assists'), 
+                p.get('leaver_status'), p.get('aghanims_scepter'), p.get('aghanims_shard'), 
+                p.get('moonshard'), p.get('personaname'), p.get('name'), p.get('rank_tier'), 
+                p.get('computed_mmr'), p.get('is_subscriber'), p.get('lobby_type'), p.get('is_contributor'), 
+                p.get('radiant_win'), p.get('kills_per_minute'), p.get('abandons'), 
                 p.get('gold'), p.get('gold_per_min'), p.get('gold_spent'), p.get('net_worth'), 
                 p.get('total_gold'), p.get('xp_per_min'), p.get('total_xp'), p.get('level'), 
                 p.get('hero_id'), p.get('hero_variant'), p.get('hero_damage'), p.get('hero_healing'), 
@@ -646,20 +667,21 @@ def sync_opendota_match_details(match_id, conn):
                 p.get('teamfight_participation'), p.get('stuns'), 
                 1 if p.get('win') == 1 else 0, 1 if p.get('lose') == 1 else 0
             )
-            cursor.execute(player_sql, (int(match_id), int(slot)) + p_params + p_params)
+            cursor.execute(insert_player_perf_sql, insert_player_perf_params)
 
+        logging.info(f"Inserted {api_url} into OpenDota.Match_Player_Performances.")
         conn.commit()
-        return 
+        return True
 
     except Exception as e:
         logging.error(f"{api_url} processing failed: {e}")
-        logging.error(f"Insert Match SQL: {header_sql}") if header_sql else None
-        logging.error(f"Insert Match Parameters: {h_params}") if h_params else None
-        logging.error(f"Match Player Performance SQL: {player_sql}") if player_sql else None
-        logging.error(f"Match Player Performance Parameters: {p_params}") if p_params else None
+        logging.error(f"Insert Match SQL: {insert_match_sql}") if insert_match_sql else None
+        logging.error(f"Insert Match Parameters: {insert_match_params}") if insert_match_params else None
+        logging.error(f"Match Player Performance SQL: {insert_player_perf_sql}") if insert_player_perf_sql else None
+        logging.error(f"Match Player Performance Parameters: {insert_player_perf_params}") if insert_player_perf_params else None
         logging.error("Traceback details:", exc_info=True) if traceback else None
         conn.rollback()
-        return 
+        return False
     finally:
         cursor.close()
 
@@ -677,15 +699,6 @@ def main():
     conn = None
     try:
         logging.info(f"Opening database connection to SQL Server.")
-        logging.info(f"Opening database connection to SQL Server.")
-        logging.info(f"sync_opendota_account_profile: {soap}")
-        logging.info(f"sync_stratz_account_profile: {ssap}")
-        logging.info(f"sync_opendota_account_matches: {soam}")
-        logging.info(f"sync_stratz_match_details: {ssmd}")
-        logging.info(f"sync_opendota_match_ids: {somi}")
-        logging.info(f"traceback: {traceback}")
-        logging.info(f"Opening database connection to SQL Server.")
-        logging.info(f"Opening database connection to SQL Server.")
         
         # Open the connection using mssql_python
         conn = mssql_python.connect(CONN_STR)
@@ -701,19 +714,22 @@ def main():
         # PHASE 2: Automatically discover missing matches from the combined pool
         # Since Stratz appears to have more matches tied to an account, use both OpenDota and Stratz as a source
         # to get match details from OpenDota 
-        matches_to_sync = sync_opendota_match_ids(conn) if somi == True else logging.info(f"Skipping OpenDota match ID sync for {account_id} as per configuration.")
-        
-        # PHASE 3: Deep crawl match detail data layers
-        if matches_to_sync:
-            logging.info(f"{sys._getframe().f_code.co_name}: Found {len(matches_to_sync)} matches to sync into OpenDota.Match_Details. Starting crawlers.")
-            for match_row in matches_to_sync:
-                # Extract integer match_id safely from the row item query result
-                match_id = match_row
-                sync_opendota_match_details(match_id, conn)
-                time.sleep(1.4)  # Space calls out to stay well clear of standard public api tier blocking rules
+        if somi:
+            # PHASE 3: Deep crawl match detail data layers
+            matches_to_sync = sync_opendota_match_ids(conn)
+            if matches_to_sync:
+                logging.info(f"{sys._getframe().f_code.co_name}: Found {len(matches_to_sync)} matches to sync into OpenDota.Match_Details. Starting crawlers.")
+                for match_id in matches_to_sync:
+                    # Extract integer match_id safely from the row item query result
+                    if sync_opendota_match_details(match_id, conn):
+                        time.sleep(1.4)  # Space calls out to stay well clear of standard public api tier blocking rules
+                    else:
+                        break  # If a single match detail crawl fails, break the loop to avoid cascading failures and hitting rate limits
+            else:
+                logging.info(f"{sys._getframe().f_code.co_name}: OpenDota.Match_Details is in sync.") if somi == True else None
         else:
-            logging.info(f"{sys._getframe().f_code.co_name}: OpenDota.Match_Details is in sync.") if somi == True else None
-                
+            logging.info(f"Skipping OpenDota match ID sync for {account_id} as per configuration.")
+                        
     except Exception as e:
         logging.critical(f"{sys._getframe().f_code.co_name}: Master pipeline control routine collapsed: {e}")
         logging.error("Traceback details:", exc_info=True) if traceback else None
