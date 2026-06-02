@@ -794,7 +794,7 @@ def main():
                         logging.info(f"Processed {index / num_matches * 100:.2f}%  of {num_matches:,} matches into OpenDota.Match_Details.")
                         next_update += match_progress_update
             else:
-                logging.info(f"{sys._getframe().f_code.co_name}: OpenDota.Match_Details is in sync.") if somi == True else None
+                logging.info(f"{sys._getframe().f_code.co_name}: OpenDota.Match_Details is in sync.") if SOMI == True else None
         else:
             logging.info(f"Skipping OpenDota match ID sync for {account_id} as per configuration.")
                         
