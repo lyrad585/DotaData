@@ -1,15 +1,15 @@
 # In OpenDota.Account_Matches and Stratz.Account_Matchese, barracks_status_dire values are not the same between OpenDota and Stratz.
 # Alias entries between OpenDota and Stratz appear to be tracked differently but accurate for the most part.
 
-import os
-import sys
 import logging
-from urllib import response
-import requests
 import mssql_python
+import os
+import requests
+import sys
 import time
 from datetime import datetime
 from dotenv import load_dotenv
+from urllib import response
 
 # 1. Initialize environment variables from your local .env file
 load_dotenv()
@@ -27,20 +27,32 @@ logging.basicConfig(
 DB_SERVER = os.getenv("DB_SERVER")
 DB_DATABASE = os.getenv("DB_DATABASE")
 ACCOUNT_IDS = os.getenv("ACCOUNT_IDS", "")
-soap = True if os.getenv("sync_opendota_account_profile_flag").lower() == "true" else False
-ssap = True if os.getenv("sync_stratz_account_profile_flag").lower() == "true" else False
-soam = True if os.getenv("sync_opendota_account_matches_flag").lower() == "true" else False
-ssmd = True if os.getenv("sync_stratz_match_details_flag").lower() == "true" else False
-somi = True if os.getenv("sync_opendota_match_ids_flag").lower() == "true" else False
-traceback = True if os.getenv("traceback_flag").lower() == "true" else False
+VPN_ENABLED = True if os.getenv("VPN_ENABLED").lower() == "true" else False
+if VPN_ENABLED:
+    VPN_PATH = os.getenv("VPN_PATH", r"C:\Program Files\Windscribe\windscribe-cli.exe")
+    VPN_LOCATIONS = os.getenv("VPN_LOCATIONS", "Not set")
+SOAP = True if os.getenv("SYNC_OPENDOTA_ACCOUNT_PROFILE_FLAG").lower() == "true" else False
+SSAP = True if os.getenv("SYNC_STRATZ_ACCOUNT_PROFILE_FLAG").lower() == "true" else False
+SOAM = True if os.getenv("SYNC_OPENDOTA_ACCOUNT_MATCHES_FLAG").lower() == "true" else False
+SSMD = True if os.getenv("SYNC_STRATZ_MATCH_DETAILS_FLAG").lower() == "true" else False
+SOMI = True if os.getenv("SYNC_OPENDOTA_MATCH_IDS_FLAG").lower() == "true" else False
+TRACEBACK = True if os.getenv("TRACEBACK_FLAG").lower() == "true" else False
 
 logging.info(f"Environment variables:")
-logging.info(f"\tsync_opendota_account_profile_flag: {soap}")
-logging.info(f"\tsync_stratz_account_profile_flag: {ssap}")
-logging.info(f"\tsync_opendota_account_matches_flag: {soam}")
-logging.info(f"\tsync_stratz_match_details_flag: {ssmd}")
-logging.info(f"\tsync_opendota_match_ids_flag: {somi}")
-logging.info(f"\ttraceback_flag: {traceback}")
+logging.info(f"\tACCOUNT_IDS: {ACCOUNT_IDS}")
+logging.info(f"\tVPN_PATH: {VPN_PATH}")
+if VPN_ENABLED:
+    if not os.path.exists(VPN_PATH):
+        logging.warning(f"VPN executable not found at {VPN_PATH}. VPN functionality will be disabled.")
+        VPN_ENABLED = False
+    logging.info(f"\tVPN_ENABLED: {VPN_ENABLED}")
+    logging.info(f"\tVPN_LOCATIONS: {VPN_LOCATIONS}")
+logging.info(f"\tSYNC_OPENDOTA_ACCOUNT_PROFILE_FLAG: {SOAP}")
+logging.info(f"\tSYNC_STRATZ_ACCOUNT_PROFILE_FLAG: {SSAP}")
+logging.info(f"\tSYNC_OPENDOTA_ACCOUNT_MATCHES_FLAG: {SOAM}")
+logging.info(f"\tSYNC_STRATZ_MATCH_DETAILS_FLAG: {SSMD}")
+logging.info(f"\tSYNC_OPENDOTA_MATCH_IDS_FLAG: {SOMI}")
+logging.info(f"\tTRACEBACK_FLAG: {TRACEBACK}")
 
 # 3. Pull database credentials out of the environment variables safely
 if not DB_SERVER or not DB_DATABASE:
@@ -72,6 +84,10 @@ def sync_opendota_account_profile(account_id, conn):
     try:
         response = requests.get(api_url, timeout=10)
         logging.info(f"Response: {response.status_code} - {response.reason}")
+
+        if response.status_code == 404:
+            raise ValueError(f"Skipping {api_url}.")
+
         response.raise_for_status()
         data = response.json()
 
@@ -154,7 +170,7 @@ def sync_opendota_account_profile(account_id, conn):
         logging.error(f"Merge Parameters: {params}") if params else None
         logging.error(f"Insert SQL: {insert_sql}") if insert_sql else None
         logging.error(f"Insert Parameters: {int(account_id)}, {str(alias_name)}, {name_since}, {int(account_id)}, {name_since}") if alias_name else None
-        logging.error("Traceback details:", exc_info=True) if traceback else None
+        logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
         conn.rollback()
         return 
     finally:
@@ -205,7 +221,6 @@ def sync_stratz_account_profile(account_id, conn):
         logging.info(f"Response: {response.status_code} - {response.reason}")
         response.raise_for_status()
         res_data = response.json()
-        logging.info(f"res_data for {account_id}:\n{res_data}.")
 
         if "errors" in res_data:
             # 1. Safely extract the message from the first error object
@@ -220,7 +235,7 @@ def sync_stratz_account_profile(account_id, conn):
                 # 3. Handle all other legitimate API errors by logging and exiting
                 logging.error(f"STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
                 logging.error(f"Query: {graphql_query}") if graphql_query else None
-                logging.error("Traceback details:", exc_info=True) if traceback else None
+                logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
                 return
 
         player_data = res_data.get("data", {}).get("player")
@@ -286,7 +301,7 @@ def sync_stratz_account_profile(account_id, conn):
         logging.error(f"Merge Parameters: {core_params}") if core_params else None
         logging.error(f"Insert SQL: {insert_alias_sql}") if insert_alias_sql else None
         logging.error(f"Insert Values: {int(account_id)}, str{alias_name}, {n.get('lastSeenDateTime')}") if alias_name else None
-        logging.error("Traceback details:", exc_info=True) if traceback else None
+        logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
         conn.rollback()
         return 
     finally:
@@ -375,7 +390,7 @@ def sync_opendota_account_matches(account_id, conn):
         logging.error(f"Query: {insert_match_sql}") if insert_match_sql else None
         logging.error(f"Match ID: {int(match_id)}") if match_id else None
         logging.error(f"Parameters: {core_params}") if core_params else None
-        logging.error("Traceback details:", exc_info=True) if traceback else None
+        logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
         conn.rollback()
         return 
     finally:
@@ -400,7 +415,7 @@ def sync_stratz_match_details(account_id, conn):
     cursor = conn.cursor()    
     cursor.execute(query, (int(account_id),))
     existing_match_ids = [row[0] for row in cursor.fetchall()]
-    logging.info(f"Found {len(existing_match_ids):,} existing account matches for {account_id} in Stratz.Match_Details.")
+    logging.info(f"Found {len(existing_match_ids):,} existing matches in Stratz.Match_Details.")
 
     stratz_token = os.getenv("STRATZ_TOKEN")
     if not stratz_token:
@@ -477,7 +492,7 @@ def sync_stratz_match_details(account_id, conn):
             if "errors" in res_data:
                 logging.error(f"STRATZ GraphQL returned query validation errors for {account_id}: {res_data['errors']}")
                 logging.error(f"Query: {graphql_query}") if graphql_query else None
-                logging.error("Traceback details:", exc_info=True) if traceback else None
+                logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
                 return 
 
             match_list = res_data.get("data", {}).get("player", {}).get("matches", []) or []
@@ -506,7 +521,7 @@ def sync_stratz_match_details(account_id, conn):
                     m.get("midLaneOutcome"), m.get("topLaneOutcome")
                 )
 
-                logging.info(f"Inserting match {match_id} into Stratz.Match_Details.")
+#                logging.info(f"Inserting match {match_id} into Stratz.Match_Details.")
                 cursor.execute(insert_match_sql, match_params)
                 batch_inserted += 1
                 total_inserted += 1
@@ -550,7 +565,7 @@ def sync_stratz_match_details(account_id, conn):
         logging.error(f"Insert Match Parameters: {match_params}") if match_params else None
         logging.error(f"Match Player Performance SQL: {insert_player_sql}") if insert_player_sql else None
         logging.error(f"Match Player Performance Parameters: {player_params}") if player_params else None
-        logging.error("Traceback details:", exc_info=True) if traceback else None
+        logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
         keep_fetching = False
         conn.rollback()
         return 
@@ -567,6 +582,7 @@ def sync_opendota_match_ids(conn):
     cursor = conn.cursor()
     try:
         # Optimized lookup using a LEFT JOIN to find missing records
+        # Match IDs 2551478029,2557256653,2574301403 gets a 404 error
         query = """
             SELECT am.match_id
             FROM OpenDota.Account_Matches am
@@ -575,6 +591,7 @@ def sync_opendota_match_ids(conn):
                 FROM OpenDota.Match_Details md
                 WHERE md.match_id = am.match_id
             )
+            AND am.match_id NOT IN (SELECT match_id FROM OpenDota.Ignored_Matches)
             UNION
             SELECT smd.match_id
             FROM Stratz.Match_Details smd
@@ -583,6 +600,7 @@ def sync_opendota_match_ids(conn):
                 FROM OpenDota.Match_Details omd
                 WHERE omd.match_id = smd.match_id
             )
+            AND smd.match_id NOT IN (SELECT match_id FROM OpenDota.Ignored_Matches)
             ORDER BY am.match_id
         """
         
@@ -590,13 +608,12 @@ def sync_opendota_match_ids(conn):
         cursor.execute(query)
         # Flatten the row tuples into a clean, list array of raw match IDs
         match_ids = [row[0] for row in cursor.fetchall()]
-        logging.info(f"Found {len(match_ids):,} existing matches between OpenDota.Account_Matches and Stratz.Match_Details.")
         return match_ids
 
     except Exception as e:
         logging.error(f"Checking for matches to sync failed: {e}")
         logging.error(f"Query: {query}") if query else None
-        logging.error("Traceback details:", exc_info=True) if traceback else None
+        logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
         return []
     finally:
         cursor.close()
@@ -614,29 +631,49 @@ def sync_opendota_match_details(match_id, conn):
     logging.info(f"URL: {api_url}")
     
     cursor = conn.cursor()
-    try:
-        # Step 1: Hit the network API endpoint
-        max_retries = int(os.getenv("MAX_RETRIES", 3))
-        retry_delay = int(os.getenv("RETRY_DELAY_SECONDS", 60))
-        retry_count = 0
-        while retry_count <= max_retries:
+
+    # Step 1: Hit the network API endpoint
+    max_retries = int(os.getenv("MAX_RETRIES", 3))
+    retry_delay = int(os.getenv("RETRY_DELAY_SECONDS", 60))
+    retry_count = 0
+
+    while retry_count <= max_retries:
+        try:
             response = requests.get(api_url, timeout=15)
             logging.info(f"Response: {response.status_code} - {response.reason}")
 
-            if response.status_code != 200:
-                retry_count += 1
-                if retry_count > max_retries:
-                    raise ValueError(f"Max retries reached for {api_url}. Status code: {response.status_code}")
-                else:
-                    logging.warning(f"Will retry after {retry_delay} seconds, attempt {retry_count} of {max_retries}...")
-                    time.sleep(int(retry_delay))
-                    retry_delay = retry_delay * 2  # Exponential backoff
+            if response.status_code == 404:
+                logging.warning(f"Ingnoring Match ID: {match_id}, inserting into OpenDota.Ignored_Matches.")
+                cursor.execute("" \
+                    "INSERT INTO OpenDota.Ignored_Matches (match_id, reason)" \
+                    "VALUES (?, ?)", (match_id, f"Response: {response.status_code} - {response.reason}"))
+                conn.commit()
+                cursor.close()
+                return True
+
+            if response.status_code == 429:
+                logging.warning(f"Rate limit hit for {api_url}.")
+
+
+            m = response.json()
+            break  # Exit the retry loop if the request was successful
+
+        except Exception as e:
+            logging.error(f"{api_url} processing failed: {e}")
+            logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
+
+            retry_count += 1
+            if retry_count > max_retries:
+                logging.error(f"Max retries reached for {api_url}. Status code: {response.status_code}")
+                cursor.close()
+                return False
             else:
-                break
+                logging.warning(f"Will retry after {retry_delay} seconds, attempt {retry_count} of {max_retries}...")
+                time.sleep(int(retry_delay))
+                retry_delay = retry_delay * 2  # Exponential backoff
+                continue  # Retry the request
 
-        response.raise_for_status()
-        m = response.json()
-
+    try:
         # Step 2: Ingest Match Header Summary Metrics (OpenDota.Match_Details)
         insert_match_sql = """
             INSERT INTO OpenDota.Match_Details (
@@ -654,13 +691,12 @@ def sync_opendota_match_details(match_id, conn):
             m.get('tower_status_radiant'), m.get('version'), m.get('patch'), m.get('region')
         )
         cursor.execute(insert_match_sql, insert_match_params)
-        # logging.info(f"Inserted {api_url} into OpenDota.Match_Details.")
 
     except Exception as e:
         logging.error(f"{api_url} processing failed: {e}")
         logging.error(f"Insert Match SQL: {insert_match_sql}") if insert_match_sql else None
         logging.error(f"Insert Match Parameters: {insert_match_params}") if insert_match_params else None
-        logging.error("Traceback details:", exc_info=True) if traceback else None
+        logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
         conn.rollback()
         return False
 
@@ -676,7 +712,6 @@ def sync_opendota_match_details(match_id, conn):
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
-        
         for p in m.get('players', []):
             slot = p.get('player_slot')
             if slot is None: 
@@ -696,6 +731,7 @@ def sync_opendota_match_details(match_id, conn):
                 1 if p.get('win') == 1 else 0, 1 if p.get('lose') == 1 else 0
             )
             cursor.execute(insert_player_perf_sql, insert_player_perf_params)
+            cursor.commit() 
 
         logging.info(f"Inserted {api_url} into OpenDota.Match_Details and OpenDota.Match_Player_Performances.")
         conn.commit()
@@ -703,11 +739,9 @@ def sync_opendota_match_details(match_id, conn):
 
     except Exception as e:
         logging.error(f"{api_url} processing failed: {e}")
-        logging.error(f"Insert Match SQL: {insert_match_sql}") if insert_match_sql else None
-        logging.error(f"Insert Match Parameters: {insert_match_params}") if insert_match_params else None
         logging.error(f"Match Player Performance SQL: {insert_player_perf_sql}") if insert_player_perf_sql else None
         logging.error(f"Match Player Performance Parameters: {insert_player_perf_params}") if insert_player_perf_params else None
-        logging.error("Traceback details:", exc_info=True) if traceback else None
+        logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
         conn.rollback()
         return False
     finally:
@@ -719,7 +753,7 @@ def main():
     
     if not ACCOUNT_IDS:
         logging.warning(f"{sys._getframe().f_code.co_name}: No account IDs identified.")
-        return
+#        return
 
     account_list = [aid.strip() for aid in ACCOUNT_IDS.split(",") if aid.strip()]
     logging.info(f"Account list: {account_list}.")
@@ -734,25 +768,31 @@ def main():
         # PHASE 1: Collect profiles, aliases, and historical stubs across all players
         for account_id in account_list:
             logging.info(f"Working on account {account_id}.")
-            sync_opendota_account_profile(account_id, conn) if soap == True else logging.info(f"Skipping OpenDota account profile sync for {account_id} as per configuration.")
-            sync_stratz_account_profile(account_id, conn) if ssap == True else logging.info(f"Skipping Stratz account profile sync for {account_id} as per configuration.")
-            sync_opendota_account_matches(account_id, conn) if soam == True else logging.info(f"Skipping OpenDota account matches sync for {account_id} as per configuration.")
-            sync_stratz_match_details(account_id, conn) if ssmd == True else logging.info(f"Skipping Stratz match details sync for {account_id} as per configuration.")
+            sync_opendota_account_profile(account_id, conn) if SOAP == True else logging.info(f"Skipping OpenDota account profile sync for {account_id} as per configuration.")
+            sync_stratz_account_profile(account_id, conn) if SSAP == True else logging.info(f"Skipping Stratz account profile sync for {account_id} as per configuration.")
+            sync_opendota_account_matches(account_id, conn) if SOAM == True else logging.info(f"Skipping OpenDota account matches sync for {account_id} as per configuration.")
+            sync_stratz_match_details(account_id, conn) if SSMD == True else logging.info(f"Skipping Stratz match details sync for {account_id} as per configuration.")
 
         # PHASE 2: Automatically discover missing matches from the combined pool
         # Since Stratz appears to have more matches tied to an account, use both OpenDota and Stratz as a source
         # to get match details from OpenDota 
-        if somi:
+        if SOMI:
             # PHASE 3: Deep crawl match detail data layers
             matches_to_sync = sync_opendota_match_ids(conn)
             if matches_to_sync:
-                logging.info(f"{sys._getframe().f_code.co_name}: Found {len(matches_to_sync):,} matches to sync into OpenDota.Match_Details. Starting crawlers.")
-                for match_id in matches_to_sync:
+                num_matches = len(matches_to_sync)
+                match_progress_update = int(num_matches * (int(os.getenv("MATCH_PROGRESS_THRESHOLD_PCT", 10)) / 100))
+                next_update = match_progress_update
+                logging.info(f"{sys._getframe().f_code.co_name}: Found {num_matches:,} matches to sync into OpenDota.Match_Details. Starting crawlers.")
+                for index, match_id in enumerate(matches_to_sync):
                     # Extract integer match_id safely from the row item query result
                     if sync_opendota_match_details(match_id, conn):
                         time.sleep(1.5)  # Space calls out to stay well clear of standard public api tier blocking rules
                     else:
                         break  # If a single match detail crawl fails, break the loop to avoid cascading failures and hitting rate limits
+                    if index == next_update:
+                        logging.info(f"Processed {index / num_matches * 100:.2f}%  of {num_matches:,} matches into OpenDota.Match_Details.")
+                        next_update += match_progress_update
             else:
                 logging.info(f"{sys._getframe().f_code.co_name}: OpenDota.Match_Details is in sync.") if somi == True else None
         else:
@@ -760,7 +800,7 @@ def main():
                         
     except Exception as e:
         logging.critical(f"{sys._getframe().f_code.co_name}: Master pipeline control routine collapsed: {e}")
-        logging.error("Traceback details:", exc_info=True) if traceback else None
+        logging.error("Traceback details:", exc_info=True) if TRACEBACK else None
     finally:
         if conn:
             conn.close()
