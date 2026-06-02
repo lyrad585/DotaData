@@ -5,6 +5,7 @@ import logging
 import mssql_python
 import os
 import requests
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -29,8 +30,10 @@ DB_DATABASE = os.getenv("DB_DATABASE")
 ACCOUNT_IDS = os.getenv("ACCOUNT_IDS", "")
 VPN_ENABLED = True if os.getenv("VPN_ENABLED").lower() == "true" else False
 if VPN_ENABLED:
-    VPN_PATH = os.getenv("VPN_PATH", r"C:\Program Files\Windscribe\windscribe-cli.exe")
+    VPN_PATH = os.getenv(r"VPN_PATH", r"C:\Program Files\Windscribe\windscribe-cli.exe")
     VPN_LOCATIONS = os.getenv("VPN_LOCATIONS", "Not set")
+    VPN_LOCATIONS = VPN_LOCATIONS.split(",") if VPN_LOCATIONS else []
+    VPN_LOCATION_START_INDEX = int(os.getenv("VPN_LOCATION_START_INDEX", 0))
 SOAP = True if os.getenv("SYNC_OPENDOTA_ACCOUNT_PROFILE_FLAG").lower() == "true" else False
 SSAP = True if os.getenv("SYNC_STRATZ_ACCOUNT_PROFILE_FLAG").lower() == "true" else False
 SOAM = True if os.getenv("SYNC_OPENDOTA_ACCOUNT_MATCHES_FLAG").lower() == "true" else False
@@ -40,13 +43,15 @@ TRACEBACK = True if os.getenv("TRACEBACK_FLAG").lower() == "true" else False
 
 logging.info(f"Environment variables:")
 logging.info(f"\tACCOUNT_IDS: {ACCOUNT_IDS}")
-logging.info(f"\tVPN_PATH: {VPN_PATH}")
+logging.info(f"\tVPN_ENABLED: {VPN_ENABLED}")
 if VPN_ENABLED:
     if not os.path.exists(VPN_PATH):
         logging.warning(f"VPN executable not found at {VPN_PATH}. VPN functionality will be disabled.")
         VPN_ENABLED = False
-    logging.info(f"\tVPN_ENABLED: {VPN_ENABLED}")
-    logging.info(f"\tVPN_LOCATIONS: {VPN_LOCATIONS}")
+    else:
+        logging.info(f"\tVPN_PATH: {VPN_PATH}")
+        logging.info(f"\tVPN_LOCATIONS: {VPN_LOCATIONS}")
+        logging.info(f"\tVPN_LOCATION_START_INDEX: {VPN_LOCATION_START_INDEX}")
 logging.info(f"\tSYNC_OPENDOTA_ACCOUNT_PROFILE_FLAG: {SOAP}")
 logging.info(f"\tSYNC_STRATZ_ACCOUNT_PROFILE_FLAG: {SSAP}")
 logging.info(f"\tSYNC_OPENDOTA_ACCOUNT_MATCHES_FLAG: {SOAM}")
@@ -127,11 +132,11 @@ def sync_opendota_account_profile(account_id, conn):
         params = (
             int(account_id), data.get('tracked_until'), data.get('solo_competitive_rank'),
             data.get('competitive_rank'), data.get('rank_tier'), data.get('leaderboard_rank'),
-            profile.get('personaname'), profile.get('name'), 1 if profile.get('plus') else 0,
+            profile.get('personaname'), profile.get('name'), profile.get('plus'),
             profile.get('cheese'), profile.get('steamid'), profile.get('avatar'),
             profile.get('avatarmedium'), profile.get('avatarfull'), profile.get('profileurl'),
             last_login, profile.get('loccountrycode'), 1 if profile.get('is_contributor') else 0,
-            1 if profile.get('is_subscriber') else 0
+            profile.get('is_subscriber')
         )
         
         logging.info(f"Merging account into OpenDota.Accounts.")
@@ -512,10 +517,10 @@ def sync_stratz_match_details(account_id, conn):
 
                 match_params = (
                     match_id,
-                    1 if m.get("didRadiantWin") else 0, m.get("durationSeconds"), m.get("startDateTime"), m.get("endDateTime"),
+                    m.get("didRadiantWin"), m.get("durationSeconds"), m.get("startDateTime"), m.get("endDateTime"),
                     m.get("towerStatusRadiant"), m.get("towerStatusDire"), m.get("barracksStatusRadiant"), m.get("barracksStatusDire"),
                     m.get("clusterId"), m.get("firstBloodTime"), m.get("lobbyType"), m.get("numHumanPlayers"), m.get("gameMode"),
-                    1 if m.get("isStats") else 0, m.get("tournamentId"), m.get("tournamentRound"), m.get("actualRank"), m.get("averageRank"),
+                    m.get("isStats"), m.get("tournamentId"), m.get("tournamentRound"), m.get("actualRank"), m.get("averageRank"),
                     m.get("averageImp"), m.get("gameVersionId"), m.get("regionId"), m.get("sequenceNum"), m.get("rank"),
                     m.get("bracket"), m.get("analysisOutcome"), m.get("predictedOutcomeWeight"), m.get("bottomLaneOutcome"),
                     m.get("midLaneOutcome"), m.get("topLaneOutcome")
@@ -533,13 +538,13 @@ def sync_stratz_match_details(account_id, conn):
 
                     player_params = (
                         match_id, slot,
-                        p.get("steamAccountId"), 1 if p.get("isRadiant") else 0, 1 if p.get("isVictory") else 0,
+                        p.get("steamAccountId"), p.get("isRadiant"), p.get("isVictory"),
                         p.get("heroId"), p.get("gameVersionId"), p.get("kills"), p.get('deaths'), p.get("assists"),
                         p.get("leaverStatus"), p.get("numLastHits"), p.get("numDenies"), p.get("goldPerMinute"),
                         p.get("networth"), p.get("experiencePerMinute"), p.get("level"), p.get("gold"), p.get("goldSpent"),
                         p.get("heroDamage"), p.get("towerDamage"), p.get("heroHealing"), p.get("partyId"),
-                        1 if p.get("isRandom") else 0, p.get("lane"), p.get("position"), p.get("streakPrediction"),
-                        1 if p.get("intentionalFeeding") else 0, p.get("role"), p.get("roleBasic"), p.get("imp"),
+                        p.get("isRandom"), p.get("lane"), p.get("position"), p.get("streakPrediction"),
+                        p.get("intentionalFeeding"), p.get("role"), p.get("roleBasic"), p.get("imp"),
                         p.get("award"), p.get("behavior"), p.get("invisibleSeconds"), p.get("dotaPlusHeroXp"), p.get("variant")
                     )
                     cursor.execute(insert_player_sql, player_params)
@@ -651,8 +656,8 @@ def sync_opendota_match_details(match_id, conn):
                 cursor.close()
                 return True
 
-            if response.status_code == 429:
-                logging.warning(f"Rate limit hit for {api_url}.")
+#            if response.status_code == 429:
+#                logging.warning(f"Rate limit hit for {api_url}.")
 
 
             m = response.json()
@@ -687,7 +692,7 @@ def sync_opendota_match_details(match_id, conn):
             match_id, m.get('barracks_status_dire'), m.get('barracks_status_radiant'), m.get('cluster'), 
             m.get('dire_score'), m.get('duration'), m.get('engine'), m.get('first_blood_time'), 
             m.get('game_mode'), m.get('human_players'), m.get('match_seq_num'), m.get('radiant_score'), 
-            1 if m.get('radiant_win') else 0, m.get('skill'), m.get('start_time'), m.get('tower_status_dire'), 
+            m.get('radiant_win'), m.get('skill'), m.get('start_time'), m.get('tower_status_dire'), 
             m.get('tower_status_radiant'), m.get('version'), m.get('patch'), m.get('region')
         )
         cursor.execute(insert_match_sql, insert_match_params)
@@ -728,7 +733,7 @@ def sync_opendota_match_details(match_id, conn):
                 p.get('hero_id'), p.get('hero_variant'), p.get('hero_damage'), p.get('hero_healing'), 
                 p.get('tower_damage'), p.get('last_hits'), p.get('denies'), p.get('kda'), 
                 p.get('teamfight_participation'), p.get('stuns'), 
-                1 if p.get('win') == 1 else 0, 1 if p.get('lose') == 1 else 0
+                p.get('win'), p.get('lose')
             )
             cursor.execute(insert_player_perf_sql, insert_player_perf_params)
             cursor.commit() 
@@ -784,6 +789,37 @@ def main():
                 match_progress_update = int(num_matches * (int(os.getenv("MATCH_PROGRESS_THRESHOLD_PCT", 10)) / 100))
                 next_update = match_progress_update
                 logging.info(f"{sys._getframe().f_code.co_name}: Found {num_matches:,} matches to sync into OpenDota.Match_Details. Starting crawlers.")
+
+
+
+
+                if VPN_ENABLED:
+                    vpn_location_index = VPN_LOCATION_START_INDEX
+                    logging.info(f"VPN enabled, attempting to connect to '{VPN_LOCATIONS[vpn_location_index]}'...")
+                    result = subprocess.run([VPN_PATH, "connect", VPN_LOCATIONS[vpn_location_index]], capture_output=True, text=True, check=True)
+
+                    if result.returncode == 0:
+                        logging.info(f"...connected!")
+                        time.sleep(5)  # Wait for DNS and network adapter to fully stabilize
+                    else:
+                        logging.error(f"Failed to connect to '{VPN_LOCATIONS[vpn_location_index]}'.")
+                        vpn_location_index = (vpn_location_index + 1) % len(VPN_LOCATIONS)
+                        while vpn_location_index != VPN_LOCATION_START_INDEX:
+                            logging.info(f"Attempting to connect to '{VPN_LOCATIONS[vpn_location_index]}'...")
+                            result = subprocess.run([VPN_PATH, "connect", VPN_LOCATIONS[vpn_location_index]], capture_output=True, text=True, check=True)
+                            if result.returncode == 0:
+                                logging.info(f"...connected!")
+                                time.sleep(5)  # Wait for DNS and network adapter to fully stabilize
+                                break
+                            else:
+                                logging.error(f"Failed to connect to '{VPN_LOCATIONS[vpn_location_index]}'.")
+                                vpn_location_index = (vpn_location_index + 1) % len(VPN_LOCATIONS)
+
+
+
+
+
+
                 for index, match_id in enumerate(matches_to_sync):
                     # Extract integer match_id safely from the row item query result
                     if sync_opendota_match_details(match_id, conn):
