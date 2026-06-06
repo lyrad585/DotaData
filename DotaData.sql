@@ -10,6 +10,8 @@ CREATE TABLE OpenDota.Accounts (
     competitive_rank INT,
     rank_tier INT,
     leaderboard_rank INT,
+    computed_mmr DECIMAL(8,3),
+    computed_mmr_turbo DECIMAL(8,3),
     personaname NVARCHAR(255),
     name NVARCHAR(255),
     plus_status BIT,
@@ -58,6 +60,16 @@ CREATE TABLE OpenDota.Account_Matches (
     average_rank INT NULL,
     leaver_status INT NULL,
     party_size INT NULL,
+    xp_per_min INT NULL,
+    gold_per_min INT NULL,
+    hero_damage INT NULL,
+    tower_damage INT NULL,
+    hero_healing INT NULL,
+    last_hits INT NULL,
+    lane INT NULL,
+    lane_role INT NULL,
+    is_roaming INT NULL,
+    cluster INT NULL,
     inserted_datetime DATETIME CONSTRAINT DF_OpenDota_Account_Matches_inserted_datetime DEFAULT getdate(),
     CONSTRAINT PK_OpenDota_Account_Matches PRIMARY KEY CLUSTERED (match_id, account_id),
     CONSTRAINT FK_OpenDota_Account_Matches_Accounts FOREIGN KEY (account_id) REFERENCES OpenDota.Accounts(account_id)
@@ -75,7 +87,11 @@ CREATE TABLE OpenDota.Match_Details (
     first_blood_time INT NULL,
     game_mode INT NULL,
     human_players INT NULL,
+leagueid INT NULL,
+lobby_type INT NULL,
     match_seq_num BIGINT NULL,
+negative_votes INT NULL,
+positive_votes INT NULL,
     radiant_score INT NULL,
     radiant_win BIT NULL,
     skill INT NULL,
@@ -83,8 +99,16 @@ CREATE TABLE OpenDota.Match_Details (
     tower_status_dire INT NULL,
     tower_status_radiant INT NULL,
     version INT NULL,
+replay_salt INT NULL,
+series_id INT NULL,
+series_type INT NULL,
     patch INT NULL,
     region INT NULL,
+throw INT NULL,
+comeback INT NULL,
+loss INT NULL,
+win INT NULL,
+replay_url NVARCHAR(512),
     inserted_datetime DATETIME CONSTRAINT DF_OpenDota_Match_Details_inserted_datetime DEFAULT GETDATE()
 );
 
@@ -132,7 +156,7 @@ CREATE TABLE OpenDota.Match_Player_Performances (
     lose BIT NULL,
     inserted_datetime DATETIME CONSTRAINT DF_OpenDota_Match_Player_Performances_inserted_datetime DEFAULT GETDATE(),
     CONSTRAINT PK_OpenDota_Match_Player_Performances PRIMARY KEY CLUSTERED (match_id, player_slot),
-    CONSTRAINT FK_OpenDota_Match_Player_Performances_Match_Details FOREIGN KEY (match_id) REFERENCES OpenDota.Match_Details(match_id) ON DELETE CASCADE
+    CONSTRAINT FK_OpenDota_Match_Player_Performances_Match_Details FOREIGN KEY (match_id) REFERENCES OpenDota.Match_Details(match_id) 
 );
 GO
 
@@ -242,6 +266,22 @@ CREATE TABLE Stratz.Match_Player_Performances (
     inserted_datetime DATETIME CONSTRAINT DF_Stratz_Match_Player_Performances_inserted_datetime DEFAULT GETDATE(),
     CONSTRAINT PK_Stratz_Match_Player_Performances PRIMARY KEY CLUSTERED (match_id, player_slot),
     CONSTRAINT FK_Stratz_Match_Player_Performances_Match_Details FOREIGN KEY (match_id) REFERENCES Stratz.Match_Details(match_id)
+);
+GO
+
+CREATE TABLE OpenDota.Ignored_Accounts (
+    account_id BIGINT NOT NULL,
+    reason NVARCHAR(max) NOT NULL,
+    inserted_datetime DATETIME CONSTRAINT DF_OpenDota_Ignored_Accounts_inserted_datetime DEFAULT GETDATE(),
+    CONSTRAINT PK_OpenDota_Ignored_Accounts PRIMARY KEY CLUSTERED (account_id)
+);
+GO
+
+CREATE TABLE OpenDota.Ignored_Matches (
+    match_id BIGINT NOT NULL,
+    reason NVARCHAR(max) NOT NULL,
+    inserted_datetime DATETIME CONSTRAINT DF_OpenDota_Ignored_Matches_inserted_datetime DEFAULT GETDATE(),
+    CONSTRAINT PK_OpenDota_Ignored_Matches PRIMARY KEY CLUSTERED (match_id)
 );
 GO
 
