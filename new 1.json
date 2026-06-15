@@ -1,0 +1,28 @@
+{
+	'data': {
+		'player': {
+			'steamAccountId': 144548731, 
+			'matchCount': 8670, 
+			'winCount': 4276, 
+			'imp': 95, 
+			'firstMatchDate': 1483148764, 
+			'lastMatchDate': 1781231410, 
+			'lastMatchRegionId': 2, 
+			'behaviorScore': 10000, 
+			'isFollowed': False, 
+			'names': [
+				{'name': "Shoresy's Mom", 'lastSeenDateTime': 1676086500}, 
+				{'name': "Shoresy's Stepper", 'lastSeenDateTime': 1676084898}, 
+				{'name': "Shoresy's Mom", 'lastSeenDateTime': 1668300441}, 
+				{'name': 'Darth Jar Jar', 'lastSeenDateTime': 1668215248}, 
+				{'name': 'pALL SMecker', 'lastSeenDateTime': 1659405700}, 
+				{'name': 'Old Dingbat', 'lastSeenDateTime': 1659402636}, 
+				{'name': 'pALL SMecker', 'lastSeenDateTime': 1647994256}, 
+				{'name': "Shoresy's Mom", 'lastSeenDateTime': 1646961391}, 
+				{'name': 'Moist Pancakette', 'lastSeenDateTime': 1646884346}, 
+				{'name': "Shoresy's Mom", 'lastSeenDateTime': 1644950390}
+			]
+		}
+	}
+}
+

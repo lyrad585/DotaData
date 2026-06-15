@@ -25,7 +25,9 @@ CREATE TABLE OpenDota.Accounts (
     loccountrycode VARCHAR(10),
     is_contributor BIT,
     is_subscriber BIT,
-    inserted_datetime DATETIME CONSTRAINT DF_OpenDota_Accounts_inserted_datetime DEFAULT getdate(),
+    ignore BIT CONSTRAINT DF_OpenDota_Accounts_ignore DEFAULT 0,
+    ignore_reason NVARCHAR(max) NULL,
+    inserted_datetime DATETIME CONSTRAINT DF_OpenDota_Accounts_inserted_datetime DEFAULT GETDATE(),
     last_updated_at DATETIME
 );
 
@@ -160,6 +162,36 @@ CREATE TABLE OpenDota.Match_Player_Performances (
 );
 GO
 
+CREATE TABLE OpenDota.Accounts_JSON (
+    accounts_json_id INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_OpenDota_Accounts_JSON PRIMARY KEY,
+    account_id BIGINT NULL CONSTRAINT FK_OpenDota_Accounts_JSON_Accounts FOREIGN KEY REFERENCES OpenDota.Accounts (account_id),
+    account_json json CONSTRAINT DF_OpenDota_Accounts_JSON_account_json DEFAULT '{}',
+    reprocess_tables BIT CONSTRAINT DF_OpenDota_Accounts_JSON_reprocess_tables DEFAULT 0,
+    inserted_datetime DATETIME CONSTRAINT DF_OpenDota_Accounts_JSON_inserted_datetime DEFAULT GETDATE(),
+    last_updated_at DATETIME
+);
+
+CREATE TABLE OpenDota.Account_Matches_JSON (
+    account_matches_json_id INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_OpenDota_Account_Matches_JSON PRIMARY KEY,
+    account_id BIGINT NULL CONSTRAINT FK_OpenDota_Accounts_JSON_Account_Matches FOREIGN KEY REFERENCES OpenDota.Accounts (account_id),
+    account_matches_json json CONSTRAINT DF_OpenDota_Account_Matches_JSON_account_matches_json DEFAULT '{}',
+    account_matches_recent_json json CONSTRAINT DF_OpenDota_Account_Matches_JSON_account_matches_recent_json DEFAULT '{}',
+    reprocess_tables BIT CONSTRAINT DF_OpenDota_Account_Matches_JSON_reprocess_tables DEFAULT 0,
+    inserted_datetime DATETIME CONSTRAINT DF_OpenDota_Account_Matches_JSON_inserted_datetime DEFAULT GETDATE(),
+    last_updated_at DATETIME
+);
+
+CREATE TABLE OpenDota.Match_Details_JSON (
+    match_details_json_id INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_OpenDota_Match_Details_JSON PRIMARY KEY,
+    match_id BIGINT NULL CONSTRAINT FK_OpenDota_Match_Details_JSON_Match_Details FOREIGN KEY REFERENCES OpenDota.Match_Details (match_id),
+    match_detail_json json CONSTRAINT DF_OpenDota_Match_Details_JSON_match_detail_json DEFAULT '{}',
+    reprocess_tables BIT CONSTRAINT DF_OpenDota_Match_Details_JSON_reprocess_tables DEFAULT 0,
+    inserted_datetime DATETIME CONSTRAINT DF_OpenDota_Match_Detail_JSON_inserted_datetime DEFAULT GETDATE(),
+    last_updated_at DATETIME
+);
+
+
+
 
 -- Create the logical schema container
 CREATE SCHEMA Stratz;
@@ -176,6 +208,8 @@ CREATE TABLE Stratz.Accounts (
     last_match_region_id INT NULL,
     behavior_score INT NULL,
     is_followed BIT NULL,
+    ignore BIT CONSTRAINT DF_Stratz_Accounts_ignore DEFAULT 0,
+    ignore_reason NVARCHAR(max) NULL,
     inserted_datetime DATETIME CONSTRAINT DF_Stratz_Accounts_inserted_datetime DEFAULT GETDATE(),
     last_updated_at DATETIME
 );
@@ -269,6 +303,39 @@ CREATE TABLE Stratz.Match_Player_Performances (
 );
 GO
 
+
+CREATE TABLE Stratz.Accounts_JSON (
+    accounts_json_id INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Stratz_Accounts_JSON PRIMARY KEY,
+    steam_account_id BIGINT NULL CONSTRAINT FK_Stratz_Accounts_JSON_Accounts FOREIGN KEY REFERENCES Stratz.Accounts (steam_account_id),
+    account_json json CONSTRAINT DF_Stratz_Accounts_JSON_account_json DEFAULT '{}',
+    reprocess_tables BIT CONSTRAINT DF_Stratz_Accounts_JSON_reprocess_tables DEFAULT 0,
+    inserted_datetime DATETIME CONSTRAINT DF_Stratz_Accounts_JSON_inserted_datetime DEFAULT GETDATE(),
+    last_updated_at DATETIME
+);
+
+
+CREATE TABLE Stratz.Match_Details_JSON (
+    match_details_json_id INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Stratz_Match_Details_JSON PRIMARY KEY,
+    match_id BIGINT NULL CONSTRAINT FK_Stratz_Match_Details_JSON_Match_Details FOREIGN KEY REFERENCES Stratz.Match_Details (match_id),
+    match_detail_json JSON CONSTRAINT DF_Stratz_Match_Details_JSON_match_detail_json DEFAULT '{}',
+    reprocess_tables BIT CONSTRAINT DF_Stratz_Match_Details_JSON_reprocess_tables DEFAULT 0,
+    inserted_datetime DATETIME CONSTRAINT DF_Stratz_Match_Detail_JSON_inserted_datetime DEFAULT GETDATE(),
+    last_updated_at DATETIME
+);
+
+
+
+
+
+
+
+
+/*
+
+THESE TABLES CAN BE DROPPED AFTER THE REWRITE IS COMPLETE
+
+*/
+
 CREATE TABLE OpenDota.Ignored_Accounts (
     account_id BIGINT NOT NULL,
     reason NVARCHAR(max) NOT NULL,
@@ -284,4 +351,19 @@ CREATE TABLE OpenDota.Ignored_Matches (
     CONSTRAINT PK_OpenDota_Ignored_Matches PRIMARY KEY CLUSTERED (match_id)
 );
 GO
+
+
+
+
+
+                        "MERGE Stratz.Accounts_JSON AS t "
+                        "USING (SELECT ? AS steam_account_id) AS s "
+                        "ON (t.steam_account_id = s.steam_account_id) "
+                        "WHEN MATCHED THEN "
+                        "    UPDATE SET "
+                        "        account_json = ?, reprocess_tables = 1, last_updated_at = GETDATE() "
+                        "WHEN NOT MATCHED THEN "
+                        "    INSERT (steam_account_id, account_json) "
+                        "    VALUES (?, ?) "
+                        "; "
 
