@@ -1,3 +1,5 @@
 .env
 *.log
 *
+main.py
+config_sources.py
