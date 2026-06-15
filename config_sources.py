@@ -183,9 +183,9 @@ SOURCES_CONFIG = {
                     "https://api.opendota.com/api/matches/{m_id}",
                 ],
                 "existing" : (
-                    "SELECT am.match_id "
-                    "FROM OpenDota.Account_Matches am "
-                    "ORDER BY am.match_id "
+                    "SELECT md.match_id "
+                    "FROM OpenDota.Match_Details md "
+                    "ORDER BY md.match_id "
                 ),
                 "m_ids" : [],
                 "list" : "",
@@ -400,8 +400,6 @@ SOURCES_CONFIG = {
                 "existing" : (
                     "SELECT md.match_id "
                     "FROM Stratz.Match_Details md "
-                    "JOIN Stratz.Match_Player_Performances mpp ON mpp.match_id = md.match_id "
-                    "WHERE mpp.steam_account_id = ? "
                     "ORDER BY md.match_id "
                 ),
                 "m_ids" : [],

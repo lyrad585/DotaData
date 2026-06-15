@@ -338,12 +338,21 @@ def sync_src_cats(conn, all_a_ids, src_name, src):
                         logging.warning(f"Ignoring...")
                         continue
 
-                    # If working on matches, get the existing matches for the account being worked on to ignore later.
-                    if src['cat'][cat]['existing']:
-                        src['cat'][cat]['m_ids'] = []
-                        src['cat'][cat]['m_ids'] = db(conn, src['cat'][cat]['existing'], a_id)
-                        logging.info(f"{len(src['cat'][cat]['m_ids'])} {src} {cat_name} will be ignored for {a_id}.")
-            
+# If working on matches, get the existing matches for the account being worked on to ignore later.
+if src['cat'][cat]['existing']:
+    src['cat'][cat]['m_ids'] = []
+    src['cat'][cat]['m_ids'] = db(conn, src['cat'][cat]['existing'], a_id)
+    logging.info(f"{len(src['cat'][cat]['m_ids'])} {src} {cat_name} will be ignored for {a_id}.")
+
+
+
+
+
+# Begin loop here
+# based on singular like with OpenDota account, account/recent matches, and match URL calls
+# and Stratz singular account graphql 
+# and Stratz batch skip/take graphql loop
+
                     # Pause to help prevent 429 errors
                     logging.info(f"Sleeping for {src['sleep']} seconds.") if conf_log['sleep'] and src['sleep'] > 0 else None
                     time.sleep(src['sleep'])
@@ -405,11 +414,11 @@ def sync_src_cats(conn, all_a_ids, src_name, src):
                             continue
 
                         logging.info(f"Looking through {len(match_list):,} {src} matches.")
-                        # Get the existing matches for the account being worked on to ignore later.
-                        src['cat'][cat]['m_ids'] = []
-                        if src['cat'][cat]['existing']:
-                            src['cat'][cat]['m_ids'] = db(conn, src['cat'][cat]['existing'], a_id)
-                            logging.info(f"{len(src['cat'][cat]['m_ids'])} {src} {cat_name} will be ignored for {a_id}.")
+# Get the existing matches for the account being worked on to ignore later.
+src['cat'][cat]['m_ids'] = []
+if src['cat'][cat]['existing']:
+    src['cat'][cat]['m_ids'] = db(conn, src['cat'][cat]['existing'], a_id)
+    logging.info(f"{len(src['cat'][cat]['m_ids'])} {src} {cat_name} will be ignored for {a_id}.")
 
                         for m in match_list:
                             match_id = m.get(src['cat'][cat]['identifier'])
@@ -427,6 +436,10 @@ def sync_src_cats(conn, all_a_ids, src_name, src):
                                 continue
 
 
+# End loop here
+# based on singular like with OpenDota account, account/recent matches, and match URL calls
+# and Stratz singular account graphql 
+# and Stratz batch skip/take graphql loop
 
 
 
